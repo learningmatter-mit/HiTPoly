@@ -280,8 +280,9 @@ if __name__ == "__main__":
         args.poly = None
     else:
         poly_name = args.poly.split(",")
-    if args.repeat_units:
-        args.repeat_units = int(args.repeat_units)
+    #doesn't work if repeat units is None
+    # if args.repeat_units:
+    #     args.repeat_units = int(args.repeat_units)
     cat_name = args.cat.split(",")
     ani_name = args.ani.split(",")
     ani_name_rdf = args.ani_rdf.split(",")
