@@ -307,7 +307,7 @@ if __name__ == "__main__":
         "-box",
         "--box_multiplier",
         help="PBC box size multiplier for packmol, poylmers <1, other molecules (solvents) 4-10",
-        default="10",
+        default="0.5",
     )
     parser.add_argument(
         "-conf",

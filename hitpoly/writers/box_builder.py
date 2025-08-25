@@ -144,9 +144,10 @@ def create_ligpargen(
     add_end_Cs,
     ligpargen_path,
     hitpoly_path,
-    reaction,
-    product_index,
-    platform,
+    reaction="[Cu][*:1].[*:2][Au]>>[*:1]-[*:2]",
+    product_index=0,
+    platform="local",
+    resid_name=None,
 ):
     smiles_initial, repeats = create_long_smiles(
         smile=smiles,
@@ -190,18 +191,21 @@ def create_ligpargen(
     print(
         Chem.MolToMolBlock(mol_initial), file=open(f"{ligpargen_path}/poly.mol", "w+")
     )
+    if not resid_name:
+        resid_name = "PLY"
+
     if platform == "local":
         os.chdir(ligpargen_path)
-        command = f"$LigParGen -m poly.mol -o 0 -c 0 -r PLY -d . -l"
+        command = f"$LigParGen -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l"
         subprocess.run(command, shell=True)
         os.chdir(hitpoly_path)
     elif platform == "supercloud":
-        supercloud_ligpargen(ligpargen_path)
+        supercloud_ligpargen(ligpargen_path, resid_name)
 
     return mol_initial, smiles_initial
 
 
-def supercloud_ligpargen(ligpargen_path):
+def supercloud_ligpargen(ligpargen_path, resid_name):
     ligpargen = os.environ.get("LigParGen")
     with open(f"{ligpargen_path}/run.sh", "w") as f:
         f.write("#!/bin/bash" + "\n")
@@ -218,7 +222,7 @@ def supercloud_ligpargen(ligpargen_path):
         f.write("source activate htvs" + "\n")
         f.write("cwd=$(pwd)" + "\n")
         f.write(f"cd {ligpargen_path}" + "\n")
-        f.write(f"{ligpargen} -m poly.mol -o 0 -c 0 -r PLY -d . -l" + "\n")
+        f.write(f"{ligpargen} -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l" + "\n")
         f.write("cd $cwd" + "\n")
     command = f"sbatch {ligpargen_path}/run.sh"
     subprocess.run(command, shell=True)
@@ -443,7 +447,8 @@ def create_packmol_input_file(
     """
     mol_list = []
     single_vol = 0
-    for i in poly_paths + salt_paths:
+    all_paths = poly_paths + salt_paths if salt_paths else poly_paths
+    for i in all_paths:
         mol = Chem.MolFromPDBFile(i, removeHs=False)
         mol_list.append(mol)
         conf = mol.GetConformer()
@@ -451,7 +456,10 @@ def create_packmol_input_file(
         # The volume of a polymer chain + anion, cation
         single_vol += 4 / 3 * np.pi * radius**3
 
-    total_vol = single_vol * sum(polymer_count) * box_multiplier
+    if sum(polymer_count) == 0:
+        total_vol = single_vol * box_multiplier * salt_concentrations[0]
+    else:
+        total_vol = single_vol * sum(polymer_count) * box_multiplier
     box_radi = np.power(3 / (4 * np.pi) * total_vol, 1 / 3)
 
     # If more than one anion, cation, create sublists
@@ -559,7 +567,7 @@ def load_hitpoly_params(
         ff_read.load_dihedral_params()
 
     if charge_scale:
-        for i in train_dataset[1:]:
+        for i in train_dataset[len(poly_smiles):]:
             i.pair_params[:, 0] = i.pair_params[:, 0] * charge_scale
 
     for i in train_dataset:
@@ -650,16 +658,20 @@ def generate_atom_types(mol, depth):
     return r, atom_names, atoms, bonds_typed
 
 
-def generate_parameter_dict(save_path, atom_names, atoms, bonds_typed):
-    forceFieldFiles = [f"{save_path}/PLY.xml"]
+def generate_parameter_dict(save_path, atom_names, atoms, bonds_typed, file_name = None, resid_name = None):
+    if not file_name:
+        file_name = "PLY"
+    if not resid_name:
+        resid_name = "PLY"
+    forceFieldFiles = [f"{save_path}/{file_name}.xml"]
 
     forcefield = ForceField(*forceFieldFiles)
 
     # Checking if the atoms have the same order and if the bonds are the same!
-    atoms_ff = [i.element._symbol for i in forcefield._templates["PLY"].atoms]
+    atoms_ff = [i.element._symbol for i in forcefield._templates[resid_name].atoms]
     assert atoms_ff == atoms
 
-    bond_list = [list(i) for i in forcefield._templates["PLY"].bonds]
+    bond_list = [list(i) for i in forcefield._templates[resid_name].bonds]
     same_bonds = 0
     for i in bond_list:
         for j in bonds_typed:
@@ -675,7 +687,7 @@ def generate_parameter_dict(save_path, atom_names, atoms, bonds_typed):
     param_dict["dihedrals"] = {}
     param_dict["impropers"] = {}
 
-    for ind, atom in enumerate(forcefield._templates["PLY"].atoms):
+    for ind, atom in enumerate(forcefield._templates[resid_name].atoms):
         param_dict["atoms"][atom.name] = {}
         param_dict["atoms"][atom.name]["type"] = atom.type
 
@@ -692,8 +704,8 @@ def generate_parameter_dict(save_path, atom_names, atoms, bonds_typed):
         ].params.paramsForType[atom.type]["epsilon"]
     type2atomdict = {}
     atom2typedict = {}
-    atom2index = forcefield._templates["PLY"].atomIndices
-    for atom in forcefield._templates["PLY"].atoms:
+    atom2index = forcefield._templates[resid_name].atomIndices
+    for atom in forcefield._templates[resid_name].atoms:
         type2atomdict[atom.type] = atom.name
         atom2typedict[atom.name] = atom.type
 
