@@ -60,6 +60,12 @@ To use HiTPoly with cpu compiled CUDA, platform name has to be adjusted in hitpo
 
 Full tutorial coming soon.
 
+## Screening with Bayesian Optimization
+
+If you want to embedd your SMILES as descriped in the paper (PCA on long representation from MolFormer), run the script generate_embedding.py for your trianing and testing data and save it in a folder named batch0 which is a subfolder of where you want to save your batches. With the ht_script.sh script you can run the high throughput BO loop. This pipeline works based on a folder on your local machine that saves the files for each batch. You also need some method/file that keeps track of how many simulations have suceeded for that batch. We suggest a csv file that has the results from all previous simulations which also includes the polymers for which the simulations did not suceed with Nan values for the properties. The example code is written for a csv file that has the columns smiles and property. Further pointers are given in the ht_script.sh script.
+
+Please cite:
+
 ## License
 
 This project is licensed under the MIT License.
