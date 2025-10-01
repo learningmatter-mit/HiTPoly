@@ -5,7 +5,7 @@ description = "High throughput polymer electrolyte MD simulation setup"
 authors = [
     {name = "Jurgis Ruza"}
 ]
-license = "MIT"
+license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.6"
 dependencies = [
