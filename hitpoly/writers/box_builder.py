@@ -13,6 +13,7 @@ import string as STRING
 import itertools
 from openbabel import pybel
 import subprocess
+from typing import List, Tuple
 
 from rdkit import Chem
 from rdkit.Geometry import Point3D
@@ -439,7 +440,7 @@ def create_packmol_input_file(
     salt_paths: list - a list of pdb filenames for the
         salt molecule to be packed
     output_name: str - path, name of the output file
-    polymer_count: float - amount of polymer chains in the box
+    polymer_count: float - amount of solvent chains in the box
     salt_concentrations: list - a list of how many of each salt in the box
     tolerance: float - 5.0, packmol packing distance
     random_seed: int - -1, random seed
@@ -1051,6 +1052,7 @@ def minimize_polymer(
     lit_charges_save_path,
     charges,
     name,
+    cuda_device="0",
 ):
     train_dataset = load_hitpoly_params(
         [long_smiles],
@@ -1097,6 +1099,7 @@ def minimize_polymer(
     equilibrate_polymer(
         save_path=save_path,
         name=name,
+        cuda_device=cuda_device,
     )
     print(f"Polymer structure has been minimized and saved at {save_path}")
 
