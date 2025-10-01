@@ -690,7 +690,7 @@ def get_coords_PDB_msd(
     cell=None,
 ):
     """
-    THIS IS GOING TO BE COM'D NOW BIIIIIAAAA***
+    Saves the unwrapped xyz coordinates of the atoms in the atom_name_list at the save_interval
     """
     xyz = []
     atom_names = []
