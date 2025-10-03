@@ -23,7 +23,7 @@ sys.setrecursionlimit(5000)
 def run(
     save_path: str,
     results_path: str,
-    smiles:list[str],
+    smiles:list,
     charge_scale:float,
     salt_type:str,
     molality:float,
@@ -31,7 +31,7 @@ def run(
     system:str,
     simu_temp:float,
     atom_count:int,
-    mol_fracs:list[float],
+    mol_fracs:list,
     simu_length:int,
     md_save_time:int,
     hitpoly_path:str,
@@ -39,7 +39,7 @@ def run(
     polymer_chain_length:int=None,
 ):
     """Run the MD simulation."""
-    cuda_device = "3"
+    cuda_device = "0"
 
     packmol_path = os.environ["packmol"]
     if not hitpoly_path:
@@ -132,6 +132,7 @@ def run(
             add_end_Cs=True,
             ligpargen_path=ligpargen_path,
             hitpoly_path=hitpoly_path,
+            platform=platform,
         )
 
         print(f"Created ligpargen files at {ligpargen_path}")
@@ -167,7 +168,7 @@ def run(
             )
 
     if system == "gel":
-        box_multiplier = 0.5
+        box_multiplier = 0.2
     elif system == "liquid":
         box_multiplier = 10
     elif system == "polymer":

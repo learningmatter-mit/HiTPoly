@@ -20,6 +20,7 @@ import argparse
 import os
 import time
 import numpy as np
+import ast
 
 
 def run(
@@ -111,7 +112,7 @@ def run(
         poly_name=[i[0] + "-" + i[1] for i in poly_names],
     )
 
-    atom_names_long_msd = [i for i in atom_names_long_msd if "PL1" not in i]
+    atom_names_long_msd = [i for i in atom_names_long_msd if "PL" not in i]
     plot_calc_corr(
         xyz=xyz_msd_corr,
         folder=folder,
@@ -286,6 +287,12 @@ if __name__ == "__main__":
     ani_name = args.ani.split(",")
     ani_name_rdf = args.ani_rdf.split(",")
     start_time = time.time()
+
+    repeat_units = ast.literal_eval(args.repeat_units)
+    if repeat_units is not None:
+        if isinstance(repeat_units, int):
+            repeat_units = [repeat_units]
+
     run(
         folder=args.folder,
         cat_name=cat_name,

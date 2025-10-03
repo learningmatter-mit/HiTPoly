@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
+import ast
 
 from tqdm import tqdm
 
@@ -696,31 +697,34 @@ def get_coords_PDB_msd(
     atom_names = []
     frames = 0
 
-    polymer_msd = False
+    polymer_msd = 0
     for i in atom_name_list:
-        if "PL1" in i:
-            polymer_msd = True
+        if "PL" in i:
+            polymer_msd += 1
+
     if polymer_msd:
-        pdb = PDBFile(f"{pre_folder}/polymer_conformation.pdb")
-        atoms_poly = [i.element._symbol for i in pdb.topology.atoms()]
-        poly_atom_ind = [
-            i for i, e in enumerate(atoms_poly) if e in ["O", "S", "N", "Si", "Br"]
-        ]
-        # Either works with defining repeat_units as an argument to run_analysis
-        # or reading a repeats.txt file that from 09/14/24 is saved from builder files
-        # or having Jurgis naming conventions
+
         if not repeat_units:
             if os.path.exists(f"{pre_folder}/repeats.txt"):
                 with open(f"{pre_folder}/repeats.txt", "r") as f:
-                    repeat_units = int(f.readlines()[0])
+                    repeat_units = ast.literal_eval(f.readlines()[0])
+
+        for i in range(len(polymer_msd)):
+            if polymer_msd > 1:
+                pdb = PDBFile(f"{pre_folder}/polymer_conformation_{i+1}.pdb")
             else:
-                repeat_units = int(pre_folder.split("/")[-2].split("_")[1][1:])
-        poly_counter = len(poly_atom_ind) // repeat_units
-        atom_name_list[-1] = [atoms_poly[poly_atom_ind[0]], "PL1"]
+                pdb = PDBFile(f"{pre_folder}/polymer_conformation.pdb")
+            atoms_poly = [i.element._symbol for i in pdb.topology.atoms()]
+            poly_atom_ind = [
+                i for i, e in enumerate(atoms_poly) if e in ["C", "O", "S", "N", "Si", "Br"]
+            ][1:-1] #ignoring the first and last atom for the polymer case where we cap ends with Cs
+            poly_counter = len(poly_atom_ind) // repeat_units[i]
+            atom_name_list[-1] = [atoms_poly[poly_atom_ind[0]], f"PL{i+1}"]
     COMS = []
     cur_frame = []
     prev_frame = []
     masses = []
+    mol_names = [i[1] for i in atom_name_list]
     with open(f"{folder}/simu_output.pdb", "r") as f:
         poly_ind = 0
         for ind, line in enumerate(f):
@@ -745,23 +749,23 @@ def get_coords_PDB_msd(
                 frames += 1
 
             for atom, mol in atom_name_list:
-                if mol in line and mol != "PL1":
+                if mol in line and "PL" not in mol:
                     values = line.split()
-                    if atom.lower() == values[-1].lower() or values[3] == "CA1":
+                    if atom.lower() == values[-1].lower() or 'CA' in values[3]:
                         x = float(line[30:38])
                         y = float(line[38:46])
                         z = float(line[46:54])
                         xyz.append(np.array([x, y, z], dtype=np.float32))
                         if frames < 2:
                             # Harcoding CA1 as the only cation
-                            if values[3] == "CA1":
+                            if 'CA' in values[3]:
                                 atom_names.append(atom + f",{mol}")
-                            else:
+                            elif 'AN' in values[3]:
                                 atom_names.append(values[-1] + f",{mol}")
-                if mol == "PL1" and mol in line:
+                if "PL" in mol and mol in line:
                     values = line.split()
-                    if values[-1].lower() in ["o", "s", "n", "si", "br"]:
-                        if poly_ind % poly_counter == 0:
+                    if values[-1].lower() in ["c", "o", "s", "n", "si", "br"]:
+                        if poly_ind % poly_counter[int(mol[-1])-1] == 0:
                             x = float(line[30:38])
                             y = float(line[38:46])
                             z = float(line[46:54])
@@ -770,7 +774,7 @@ def get_coords_PDB_msd(
                                 atom_names.append(values[-1] + f",{mol}")
                         poly_ind += 1
 
-            if "PL1" in line or "CA1" in line or "AN1" in line:
+            if any(mol in line for mol in mol_names):
                 values = line.split()
                 if "TER" == values[0]:
                     continue
@@ -781,8 +785,10 @@ def get_coords_PDB_msd(
                     cur_frame.append(np.array([x, y, z], dtype=np.float32))
 
                     if frames < 2:
-                        if values[3] == "CA1":
-                            masses.append(ELEMENT_TO_MASS["Li"])
+                        if 'CA' in values[3]:
+                            for i in atom_name_list:
+                                if values[3] == i[1]:
+                                    masses.append(ELEMENT_TO_MASS[i[0]])
                         else:
                             masses.append(ELEMENT_TO_MASS[values[-1]])
 
