@@ -87,9 +87,6 @@ def run(
             name = f"polymer_conformation{extra_name}.pdb"
             filename_list.append(name)
 
-        with open(f"{save_path}/repeats{extra_name}.txt", "w") as f:
-            f.write(str(repeats))
-
         ligpargen_path = f"{save_path}/ligpargen{extra_name}"
         print(f"ligpargen path: {ligpargen_path}")
         if not os.path.isdir(ligpargen_path):

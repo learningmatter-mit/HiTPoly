@@ -701,7 +701,6 @@ def get_coords_PDB_msd(
     for i in atom_name_list:
         if "PL" in i:
             polymer_msd += 1
-
     if polymer_msd:
 
         if not repeat_units:
@@ -728,6 +727,8 @@ def get_coords_PDB_msd(
     with open(f"{folder}/simu_output.pdb", "r") as f:
         poly_ind = 0
         for ind, line in enumerate(f):
+            if line.startswith('TER'):
+                continue
             if "MODEL" in line:
                 if prev_frame:
                     prev_frame = np.array(prev_frame)
@@ -749,21 +750,19 @@ def get_coords_PDB_msd(
                 frames += 1
 
             for atom, mol in atom_name_list:
-                if mol in line and "PL" not in mol:
-                    values = line.split()
-                    if atom.lower() == values[-1].lower() or 'CA' in values[3]:
+                values = line.split()
+                if mol in line and "PL" not in mol and "PL" not in line[17:20]:
+                    if atom.lower() == values[-1].lower() or 'CA' in line[17:20]:
                         x = float(line[30:38])
                         y = float(line[38:46])
                         z = float(line[46:54])
                         xyz.append(np.array([x, y, z], dtype=np.float32))
                         if frames < 2:
-                            # Harcoding CA1 as the only cation
-                            if 'CA' in values[3]:
+                            if 'CA' in line[17:20]:
                                 atom_names.append(atom + f",{mol}")
-                            elif 'AN' in values[3]:
+                            elif 'AN' in line[17:20]:
                                 atom_names.append(values[-1] + f",{mol}")
-                if "PL" in mol and mol in line:
-                    values = line.split()
+                if "PL" in mol and mol in line and "PL" in line[17:20]:
                     if values[-1].lower() in ["c", "o", "s", "n", "si", "br"]:
                         if poly_ind % poly_counter[int(mol[-1])-1] == 0:
                             x = float(line[30:38])
@@ -774,23 +773,20 @@ def get_coords_PDB_msd(
                                 atom_names.append(values[-1] + f",{mol}")
                         poly_ind += 1
 
-            if any(mol in line for mol in mol_names):
+            if any(mol in line[17:20] for mol in mol_names):
                 values = line.split()
-                if "TER" == values[0]:
-                    continue
-                else:
-                    x = float(line[30:38])
-                    y = float(line[38:46])
-                    z = float(line[46:54])
-                    cur_frame.append(np.array([x, y, z], dtype=np.float32))
+                x = float(line[30:38])
+                y = float(line[38:46])
+                z = float(line[46:54])
+                cur_frame.append(np.array([x, y, z], dtype=np.float32))
 
-                    if frames < 2:
-                        if 'CA' in values[3]:
-                            for i in atom_name_list:
-                                if values[3] == i[1]:
-                                    masses.append(ELEMENT_TO_MASS[i[0]])
-                        else:
-                            masses.append(ELEMENT_TO_MASS[values[-1]])
+                if frames < 2:
+                    if 'CA' in line[17:20]:
+                        for i in atom_name_list:
+                            if line[17:20] == i[1]:
+                                masses.append(ELEMENT_TO_MASS[i[0]])
+                    else:
+                        masses.append(ELEMENT_TO_MASS[values[-1]])
 
         # Calculating the COM of the final frame
         prev_frame = np.array(prev_frame)
@@ -819,7 +815,7 @@ def get_coords_PDB_msd(
     print(
         f"{frames} MSD frames have been saved at {folder}, simulation time {simu_time}"
     )
-    return frames - 1, simu_time
+    return frames - 1, simu_time, repeat_units
 
 #this isn't functional yet, kyujong also needs to confirm that analysis is valid for taking the frame in our intervals
 def get_coords_PDB_coordinating_atoms(

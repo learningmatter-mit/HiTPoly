@@ -1153,6 +1153,107 @@ def prod_run_nvt(
         with open(f"{save_path}/final_state_box.pdb", "w") as f:
             PDBFile.writeFile(modeller.topology, minpositions, f)
 
+def prod_run_tg(
+    save_path,
+    final_save_path,
+    simu_time,
+    start_temperature=500,
+    end_temperature=100,
+    temperature_step=20,
+    logperiod=5000,
+    mdOutputTime=12500,
+    timestep=0.002,
+    extra_name=None,
+    simu_pressure=1,
+    cuda_device="0",
+    fraction_froze=None,
+):
+    integrator, barostat, barostat_id, simulation, system, modeller = (
+        iniatilize_simulation(
+            save_path=save_path,
+            final_save_path=final_save_path,
+            temperature=start_temperature,
+            pressure=simu_pressure,
+            cuda_device=cuda_device,
+            equilibration=True,
+            barostat=True,
+            timestep=timestep,
+            fraction_froze=fraction_froze,
+        )
+    )
+
+    # ns to ps
+    simu_steps = (simu_time * 1000) / timestep
+
+    simulation.reporters.append(
+        StateDataReporter(
+            f"{save_path}/simulation.log",
+            logperiod,
+            step=True,
+            time=True,
+            potentialEnergy=True,
+            kineticEnergy=True,
+            totalEnergy=True,
+            temperature=True,
+            progress=True,
+            volume=True,
+            density=True,
+            speed=True,
+            totalSteps=simu_steps,
+            separator="\t",
+        )
+    )
+
+    simulation.reporters.append(
+        PDBReporter(f"{save_path}/simu_output.pdb", mdOutputTime)
+    )
+    simulation.reporters.append(
+        StateDataReporter(
+            stdout,
+            mdOutputTime,
+            step=True,
+            potentialEnergy=True,
+            temperature=True,
+            speed=True,
+            density=True,
+        )
+    )
+
+    print(f"Starting production Tg run at {start_temperature} K and end at {end_temperature} K")
+
+    for ind, t in enumerate(
+            np.arange(end_temperature, start_temperature + 1, temperature_step)[::-1]
+        ):
+        integrator.setTemperature(t * kelvin)
+        simulation.context.setParameter(barostat.Temperature(), t * kelvin)
+        simulation.step(simu_steps)
+
+        if ind%5 == 0:
+            final_state = simulation.context.getState(
+                getPositions=True, getVelocities=True, getParameters=True
+            )
+
+            final_state_file = (
+                f"{save_path}/final_state_{int(t)}.xml"
+            )
+
+            with open(final_state_file, "w") as f:
+                f.write(XmlSerializer.serialize(final_state))
+
+            if ind > 0:
+                prev_state_file = (
+                    f"{save_path}/final_state_{int(t+5*temperature_step)}.xml"
+                )
+                os.remove(prev_state_file)
+
+            minpositions = simulation.context.getState(getPositions=True).getPositions()
+            modeller.topology.setPeriodicBoxVectors(final_state.getPeriodicBoxVectors())
+            print(
+                f"Post minimization box dimension along the X axis: {final_state.getPeriodicBoxVectors()[0]._value}"
+            )
+            with open(f"{save_path}/final_state_box.pdb", "w") as f:
+                PDBFile.writeFile(modeller.topology, minpositions, f)
+
 
 def write_analysis_script(
     save_path,
@@ -1181,8 +1282,8 @@ def write_analysis_script(
                 f"python $HiTPoly/run_analysis_openmm.py -p $DATA_PATH -d {int(prod_run_time/2*3/4)}"
             )
             f.write(
-                f" --repeat_units {repeat_units} -n $NAME -f {xyz_output} -temp {simu_temperature} --platform {platform}"
-                + f" --cat {cation} --ani {anion} --ani_rdf {ani_name_rdf} \n"
+                f" --repeat_units {','.join(str(i) for i in repeat_units)} -n $NAME -f {xyz_output} -temp {simu_temperature}"
+                + f"--platform {platform} --cat {cation} --ani {anion} --ani_rdf {ani_name_rdf} \n"
             )
 
     elif platform == "engaging":

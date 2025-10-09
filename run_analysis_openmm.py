@@ -60,7 +60,7 @@ def run(
     cell = save_gromacs_params(folder)
 
     if not os.path.exists(f"{folder}/atom_names_msd.txt"):
-        frame_count, simu_time = get_coords_PDB_msd(
+        frame_count, simu_time, repeat_units = get_coords_PDB_msd(
             folder,
             pre_folder,
             atom_name_list,
@@ -110,6 +110,7 @@ def run(
         atom_names=atom_names_long_msd,
         name=name,
         poly_name=[i[0] + "-" + i[1] for i in poly_names],
+        atom_names_list=atom_name_list,
     )
 
     atom_names_long_msd = [i for i in atom_names_long_msd if "PL" not in i]
@@ -126,92 +127,88 @@ def run(
     )
 
     one_name = [f"{cat_name[0]}-CA1"]
-    two_names = [
-        [
-            "O-PL1",
-            "S-PL1",
-            "N-PL1",
-            "Br-PL1",
-            "P-PL1",
-            "Si-PL1",
-        ],
-        ["O-PL1"],
-        ["S-PL1", "N-PL1", "Br-PL1", "P-PL1", "Si-PL1"]
-    ]
-    names = ["solv_all", "O_poly", "others_poly"]
+    coord_atoms = ["O", "S", "N", "Br", "P", "Si"]
+    names_temp = ["solv_all", "O_poly", "others_poly"]
+    two_names = []
+    names = []
+    for i in range(len(repeat_units)):
+        two_names.append([j+"-PL"+str(i+1) for j in coord_atoms])
+        two_names.append(["O"+"-PL"+str(i+1)])
+        two_names.append([j+"-PL"+str(i+1) for j in coord_atoms if j != "O"])
+        names.extend([j+"_PL"+str(i+1) for j in names_temp])
     for i in ani_name_rdf:
         two_names.append([f"{i}-AN1"])
         two_names[0].append(f"{i}-AN1")
         names.append(f"{i}_ani")
 
-    for frame in ["beginning", "end"]:
-        xyz_rdf, atom_names_rdf, atom_names_long_rdf, residue_ids = read_xyz(
-            folder,
-            "atom_names_rdf.txt",
-            f"xyz_wrapped_rdf_{frame}.txt",
-            include_resid=True,
-        )
-        temp_names = ["_".join([name, frame]) for name in names]
-        plot_calc_rdf(
-            xyz_rdf_unwrp=xyz_rdf,
-            folder=folder,
-            one_name=one_name,
-            two_names=two_names,
-            cell=cell,
-            atom_names_long_rdf=atom_names_long_rdf,
-            names=temp_names,
-            temperature=temperature,
-        )
+    frame = "end"
+    xyz_rdf, atom_names_rdf, atom_names_long_rdf, residue_ids = read_xyz(
+        folder,
+        "atom_names_rdf.txt",
+        f"xyz_wrapped_rdf_{frame}.txt",
+        include_resid=True,
+    )
+    temp_names = ["_".join([name, frame]) for name in names]
+    plot_calc_rdf(
+        xyz_rdf_unwrp=xyz_rdf,
+        folder=folder,
+        one_name=one_name,
+        two_names=two_names,
+        cell=cell,
+        atom_names_long_rdf=atom_names_long_rdf,
+        names=temp_names,
+        temperature=temperature,
+    )
 
-        # convex hull coordination analysis
-        atom_names_rdf = np.array(atom_names_rdf)
-        atom_names_long_rdf = np.array(atom_names_long_rdf)
+    # convex hull coordination analysis
+    atom_names_rdf = np.array(atom_names_rdf)
+    atom_names_long_rdf = np.array(atom_names_long_rdf)
 
-        structurelist = get_structure_list(
-            atom_names_rdf=atom_names_rdf,
-            xyz_rdf=xyz_rdf,
-            res_id=residue_ids,
-            box_dim=cell[0][0],
-        )
+    structurelist = get_structure_list(
+        atom_names_rdf=atom_names_rdf,
+        xyz_rdf=xyz_rdf,
+        res_id=residue_ids,
+        box_dim=cell[0][0],
+    )
 
-        data_coordination = {
-            i: {
-                j: {"nlist": nlist, "dist": dist, "numer_coord_O": len(nlist)}
-                for j, (nlist, dist) in enumerate(
-                    (
-                        get_coord_environment_convex(
-                            li_idx, structurelist[i], return_dist=True, ani_name_rdf=ani_name_rdf
-                        )
-                        for li_idx in structurelist[i].indices_from_symbol("Li")
+    data_coordination = {
+        i: {
+            j: {"nlist": nlist, "dist": dist, "numer_coord_O": len(nlist)}
+            for j, (nlist, dist) in enumerate(
+                (
+                    get_coord_environment_convex(
+                        li_idx, structurelist[i], return_dist=True, ani_name_rdf=ani_name_rdf
                     )
+                    for li_idx in structurelist[i].indices_from_symbol("Li")
                 )
-            }
-            for i in range(len(structurelist))
+            )
         }
+        for i in range(len(structurelist))
+    }
 
-        coord_env_atomtypes, number_atoms_coord_env = return_atomtypes_numberneighbors(
-            data=data_coordination
-        )
-        distance_coord = return_distance_coordination(
-            data=data_coordination, folder=folder
-        )
+    coord_env_atomtypes, number_atoms_coord_env = return_atomtypes_numberneighbors(
+        data=data_coordination
+    )
+    distance_coord = return_distance_coordination(
+        data=data_coordination, folder=folder
+    )
 
-        make_barplot_coordination_atomtypes(
-            data=data_coordination,
-            coord_env=coord_env_atomtypes,
-            num_neighs=number_atoms_coord_env,
-            distance_coord=distance_coord,
-            folder=folder,
-            name=frame,
-            temperature=temperature,
-        )
+    make_barplot_coordination_atomtypes(
+        data=data_coordination,
+        coord_env=coord_env_atomtypes,
+        num_neighs=number_atoms_coord_env,
+        distance_coord=distance_coord,
+        folder=folder,
+        name=frame,
+        temperature=temperature,
+    )
 
-        make_violinplot_distance_coordinationnumber(
-            distance_coord=distance_coord,
-            folder=folder,
-            name=frame,
-            temperature=temperature,
-        )
+    make_violinplot_distance_coordinationnumber(
+        distance_coord=distance_coord,
+        folder=folder,
+        name=frame,
+        temperature=temperature,
+    )
 
 
 if __name__ == "__main__":
@@ -239,7 +236,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--poly",
-        default="O",
+        default="None",
         help="Name of the polymer atom, can input comma separated list, example O,O for two O containing polymers",
     )
     parser.add_argument(
@@ -278,25 +275,27 @@ if __name__ == "__main__":
     if args.name == "None":
         args.name = None
     if args.poly == "None":
-        args.poly = None
+        poly_name = None
     else:
         poly_name = args.poly.split(",")
-    if args.repeat_units is not None:
-        args.repeat_units = int(args.repeat_units)
     cat_name = args.cat.split(",")
     ani_name = args.ani.split(",")
     ani_name_rdf = args.ani_rdf.split(",")
     start_time = time.time()
 
-    repeat_units = ast.literal_eval(args.repeat_units)
-    if repeat_units is not None:
-        if isinstance(repeat_units, int):
-            repeat_units = [repeat_units]
+    if args.repeat_units is not None:
+        repeat_units = ast.literal_eval(args.repeat_units)
+        if repeat_units is not None:
+            if isinstance(repeat_units, int):
+                repeat_units = [repeat_units]
+            else:
+                repeat_units = [int(i) for i in repeat_units]
 
     run(
         folder=args.folder,
         cat_name=cat_name,
         ani_name=ani_name,
+        ani_name_rdf=ani_name_rdf,
         simu_time=int(args.simu_t),
         diffu_calc_start_time=int(args.diffu_t),
         save_freq=int(args.save_freq),
