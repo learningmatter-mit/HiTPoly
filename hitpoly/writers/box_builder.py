@@ -202,9 +202,86 @@ def create_ligpargen(
         os.chdir(hitpoly_path)
     elif platform == "supercloud":
         supercloud_ligpargen(ligpargen_path, resid_name)
+    elif platform == "perlmutter":
+        perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix)
 
     return mol_initial, smiles_initial
 
+def perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix):
+    # 1. Check environment variable
+    ligpargen = os.environ.get("LigParGen")
+    print(f"LigParGen path: {ligpargen}")  # Debugging line
+
+    if ligpargen is None:
+        print("ERROR: Environment variable LigParGen is not set!")
+        return
+
+    print(f"Molecule filename: {mol_filename}")  # Debugging line
+    print(f"Output prefix: {output_prefix}")  # Debugging line
+
+    # 2. Build the full path to the run script
+    run_script_path = os.path.join(ligpargen_path, "run.sh")
+
+    # 3. Write the shell script (remove SBATCH lines)
+    with open(run_script_path, "w") as f:
+        f.write("#!/bin/bash\n")
+        f.write("\n")
+        f.write("# Load modules\n")
+        f.write("source $HOME/.bashrc\n")
+        f.write("conda activate htvs\n")
+        
+        #Replace with your path
+        f.write("export PYTHONPATH=/global/homes/t/trios/htvs/ligpargen\n")
+        
+        f.write("cwd=$(pwd)\n")
+        f.write(f"cd {ligpargen_path}\n")
+        f.write(f"{ligpargen} -m {mol_filename} -o 0 -c 0 -r {output_prefix} -d . -l\n")
+        f.write("cd $cwd\n")
+
+    # Make sure the script is executable
+    os.chmod(run_script_path, 0o755)
+
+    # 4. Confirm the file exists
+    if not os.path.exists(run_script_path):
+        print("ERROR: run.sh script was not created!")
+        return
+
+    # 5. Print script for debugging
+    print("\n--- Contents of run.sh ---")
+    with open(run_script_path) as f:
+        print(f.read())
+    print("--- End of run.sh ---\n")
+
+    # 6. Run the script directly via bash
+    print("Running run.sh directly via bash...")
+
+    result = subprocess.run(
+        f"bash {run_script_path}",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    print("STDOUT:", result.stdout.strip())
+    print("STDERR:", result.stderr.strip())
+
+    # 7. Check for errors in execution
+    if result.returncode != 0:
+        print("ERROR: run.sh execution failed!")
+        return
+
+    # 8. Wait for the expected output
+    expected_output_file = os.path.join(ligpargen_path, f"{output_prefix}.xml")
+    t0 = time.time()
+    while True:
+        if os.path.exists(expected_output_file):
+            time.sleep(2)
+            print(f"Output file {expected_output_file} found.")
+            break
+        elif time.time() - t0 > 300:
+            print(f"Timeout: {expected_output_file} not found within the time limit.")
+            break
+        else:
+            time.sleep(10)
 
 def supercloud_ligpargen(ligpargen_path, resid_name):
     ligpargen = os.environ.get("LigParGen")
