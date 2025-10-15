@@ -324,7 +324,7 @@ if __name__ == "__main__":
 
     with open(args.smiles_path, "r") as f:
         lines = f.readlines()
-        smiles = lines[0].split(",")
+        smiles = lines[0].split(".")
         if len(smiles) > 1:
             mol_fracs = lines[1].split(",")
             mol_fracs = [float(i) for i in mol_fracs]

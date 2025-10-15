@@ -284,7 +284,6 @@ def perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix):
             time.sleep(10)
 
 def supercloud_ligpargen(ligpargen_path, resid_name):
-    ligpargen = os.environ.get("LigParGen")
     with open(f"{ligpargen_path}/run.sh", "w") as f:
         f.write("#!/bin/bash" + "\n")
         f.write("#SBATCH --job-name=ligpargen" + "\n")
@@ -294,13 +293,11 @@ def supercloud_ligpargen(ligpargen_path, resid_name):
         f.write("#SBATCH --cpus-per-task=1" + "\n")
         f.write("#SBATCH --time=2:00:00" + "\n")
         f.write("\n")
-        f.write("# Load modules" + "\n")
-        f.write("source /etc/profile" + "\n")
-        f.write("source $HOME/.bashrc" + "\n")
-        f.write("source activate htvs" + "\n")
         f.write("cwd=$(pwd)" + "\n")
         f.write(f"cd {ligpargen_path}" + "\n")
-        f.write(f"{ligpargen} -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l" + "\n")
+        f.write(f"export XDG_DATA_HOME=/state/partition1/user/$(id -un)" + "\n")
+        f.write(f"podman load -i $HOME/containers/ligpargen.tar" + "\n")
+        f.write(f"podman run --rm -w /app/RUN -v .:/app/RUN:Z -v .:/app/RUN:Z ligpargen:latest python ../LigParGen/Converter.py -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l" + "\n")
         f.write("cd $cwd" + "\n")
     command = f"sbatch {ligpargen_path}/run.sh"
     subprocess.run(command, shell=True)

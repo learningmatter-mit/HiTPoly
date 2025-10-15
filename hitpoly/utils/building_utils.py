@@ -247,5 +247,5 @@ def get_concentraiton_from_molality_multi_system(
         weight_prcnt = [100]
         total_atoms = get_atom_count(salt_smiles)*concentration+number_of_molecules[0]*atom_count_solvent[0]
 
-    
+    print(f"Concentration: {concentration}, number_of_molecules: {number_of_molecules}, repeat_units: {repeat_units}, weight_prcnt: {weight_prcnt}, total_atoms: {total_atoms}")
     return [concentration, concentration], number_of_molecules.tolist(), repeat_units, weight_prcnt, total_atoms
