@@ -1,20 +1,16 @@
 import argparse
 import os
-import time
-import shutil
-import uuid
 from hitpoly.writers.box_builder import *
 from hitpoly.utils.building_utils import salt_string_to_values, get_concentraiton_from_molality_multi_system
-from hitpoly.simulations.gromacs_writer import GromacsWriter
 from hitpoly.simulations.openmm_scripts import (
     equilibrate_system_1,
     equilibrate_system_2,
     prod_run_nvt,
+    prod_run_tg,
     write_analysis_script,
     equilibrate_system_liquid1,
     equilibrate_system_liquid2,
 )
-from distutils.dir_util import copy_tree
 import sys
 
 sys.setrecursionlimit(5000)
@@ -37,6 +33,7 @@ def run(
     hitpoly_path:str,
     platform:str='local',
     polymer_chain_length:int=None,
+    simu_type="conductivity",
 ):
     """Run the MD simulation."""
     cuda_device = "0"
@@ -226,26 +223,37 @@ def run(
             cuda_device=cuda_device,
         )
 
-    prod_run_nvt(
-        save_path=save_path,
-        final_save_path=final_save_path,
-        simu_temp=simu_temp,
-        mdOutputTime=md_save_time,
-        simu_time=simu_length,
-        cuda_device=cuda_device,
-    )
+    if simu_type == "conductivity":
+        prod_run_nvt(
+            save_path=save_path,
+            final_save_path=final_save_path,
+            simu_temp=simu_temp,
+            mdOutputTime=md_save_time,
+            simu_time=simu_length,
+            cuda_device=cuda_device,
+        )
 
-    write_analysis_script(
-        save_path=save_path,
-        results_path=results_path,
-        platform=platform,
-        repeat_units=repeats,
-        cation=salt_type.split(".")[0],
-        anion=ani_name_rdf.split(",")[0],
-        simu_temperature=simu_temp,
-        prod_run_time=simu_length,
-        ani_name_rdf=ani_name_rdf,
-    )
+        write_analysis_script(
+            save_path=save_path,
+            results_path=results_path,
+            platform=platform,
+            repeat_units=repeats,
+            cation=salt_type.split(".")[0],
+            anion=ani_name_rdf.split(",")[0],
+            simu_temperature=simu_temp,
+            prod_run_time=simu_length,
+            ani_name_rdf=ani_name_rdf,
+        )
+
+    elif simu_type.lower() == "tg":
+        prod_run_tg(
+            save_path=save_path,
+            final_save_path=final_save_path,
+            simu_time=10,
+            start_temperature=500,
+            end_temperature=100,
+            temperature_step=20,
+        )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Boxbuilder for OpenMM simulations")
@@ -317,6 +325,11 @@ if __name__ == "__main__":
         help="Polymer chain length",
         default="None",
     )
+    parser.add_argument(
+        "--simu_type",
+        help="What type of simulation to perform, options [conductivity, tg]}",
+        default="conductivity",
+    )
     args = parser.parse_args()
 
     if args.hitpoly_path == "None":
@@ -360,4 +373,5 @@ if __name__ == "__main__":
         polymer_chain_length=polymer_chain_length,
         mol_fracs=mol_fracs,
         hitpoly_path=args.hitpoly_path,
+        simu_type=args.simu_type,
     )

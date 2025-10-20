@@ -59,7 +59,7 @@ def run(
     print("folder:", folder)
     cell = save_gromacs_params(folder)
 
-    if not os.path.exists(f"{folder}/atom_names_msd.txt"):
+    if not os.path.exists(f"{folder}/xyz_wrapped_msd.txt"):
         frame_count, simu_time, repeat_units = get_coords_PDB_msd(
             folder,
             pre_folder,
@@ -75,7 +75,7 @@ def run(
         print("MSD coords and atom names already exists!")
 
     if rdf:
-        if not os.path.exists(f"{folder}/atom_names_rdf.txt"):
+        if not os.path.exists(f"{folder}/xyz_wrapped_rdf_end.txt"):
             get_coords_PDB_rdf_openmm(
                 folder=folder,
                 frame_count=frame_count,
@@ -303,6 +303,6 @@ if __name__ == "__main__":
         name=args.name,
         platform=args.platform,
         poly_name=poly_name,
-        repeat_units=args.repeat_units,
+        repeat_units=repeat_units,
     )
     print("length of analysis [m]:", (time.time() - start_time) / 60)

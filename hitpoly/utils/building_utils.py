@@ -138,7 +138,7 @@ def calculate_composition_by_atoms(
             - weight_percent (list[float]): The resulting weight percent for each component.
     """
     # 1. Calculate the average number of atoms per molecule, weighted by mole fraction
-    avg_apm = sum(mf * apm for mf, apm in zip(mole_fractions, atoms_per_molecule))
+    avg_apm = sum([mf * apm for mf, apm in zip(mole_fractions, atoms_per_molecule)])
     if avg_apm == 0:
         n = len(molecular_weights)
         return [0] * n, [mf * 100 for mf in mole_fractions], [0.0] * n

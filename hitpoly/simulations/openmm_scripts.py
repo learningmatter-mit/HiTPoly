@@ -1283,7 +1283,7 @@ def write_analysis_script(
             )
             f.write(
                 f" --repeat_units {','.join(str(i) for i in repeat_units)} -n $NAME -f {xyz_output} -temp {simu_temperature}"
-                + f"--platform {platform} --cat {cation} --ani {anion} --ani_rdf {ani_name_rdf} \n"
+                + f" --platform {platform} --cat {cation} --ani {anion} --ani_rdf {ani_name_rdf} \n"
             )
 
     elif platform == "engaging":

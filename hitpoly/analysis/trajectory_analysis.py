@@ -699,26 +699,42 @@ def get_coords_PDB_msd(
 
     polymer_msd = 0
     for i in atom_name_list:
-        if "PL" in i:
-            polymer_msd += 1
-    if polymer_msd:
+        for j in i:
+            if "PL" in j:
+                polymer_msd += 1
 
+
+    if polymer_msd:
+        poly_counter = []
         if not repeat_units:
             if os.path.exists(f"{pre_folder}/repeats.txt"):
                 with open(f"{pre_folder}/repeats.txt", "r") as f:
                     repeat_units = ast.literal_eval(f.readlines()[0])
 
-        for i in range(len(polymer_msd)):
+        for i in range(polymer_msd):
             if polymer_msd > 1:
-                pdb = PDBFile(f"{pre_folder}/polymer_conformation_{i+1}.pdb")
+                pdb = PDBFile(f"{pre_folder}/polymer_conformation_{i}.pdb")
+                
             else:
                 pdb = PDBFile(f"{pre_folder}/polymer_conformation.pdb")
             atoms_poly = [i.element._symbol for i in pdb.topology.atoms()]
-            poly_atom_ind = [
-                i for i, e in enumerate(atoms_poly) if e in ["C", "O", "S", "N", "Si", "Br"]
-            ][1:-1] #ignoring the first and last atom for the polymer case where we cap ends with Cs
-            poly_counter = len(poly_atom_ind) // repeat_units[i]
-            atom_name_list[-1] = [atoms_poly[poly_atom_ind[0]], f"PL{i+1}"]
+            if repeat_units[i] > 1:
+                poly_atom_ind = [
+                    i for i, e in enumerate(atoms_poly) if e in ["C", "O", "S", "N", "Si", "Br"]
+                ]
+                poly_counter.append(len(poly_atom_ind) // int(repeat_units[i]))
+            else:
+                poly_atom_ind = [
+                    i for i, e in enumerate(atoms_poly) if e in ["C", "O", "S", "N", "Si", "Br"]
+                ]
+                poly_counter.append(len(poly_atom_ind))
+
+            poly_in_name_list = False
+            for j in atom_name_list:
+                if j[1] in f"PL{i+1}":
+                    poly_in_name_list = True
+            if not poly_in_name_list:
+                atom_name_list.append([atoms_poly[poly_atom_ind[0]], f"PL{i+1}"])
     COMS = []
     cur_frame = []
     prev_frame = []
@@ -796,6 +812,9 @@ def get_coords_PDB_msd(
         total_mass = np.sum(masses)
         COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
 
+    with open(f"{folder}/atom_names_msd.txt", "w") as f:
+        for i in atom_names:
+            f.write(f"{i}\n")
     xyz = np.array(xyz)
     xyz = xyz.reshape(len(COMS), len(atom_names), 3)
     for ind, com in enumerate(COMS):
@@ -805,9 +824,6 @@ def get_coords_PDB_msd(
     with open(f"{folder}/xyz_wrapped_msd.txt", "w") as f:
         for xyz in xyz:
             f.write(f"{xyz[0]},{xyz[1]},{xyz[2]}\n")
-    with open(f"{folder}/atom_names_msd.txt", "w") as f:
-        for i in atom_names:
-            f.write(f"{i}\n")
     with open(f"{folder}/frame_count.txt", "w") as f:
         f.write(f"{frames-1}")  # This frames-1 might be completely unnecessary actually
 
