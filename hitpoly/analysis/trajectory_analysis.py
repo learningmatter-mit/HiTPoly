@@ -720,12 +720,12 @@ def get_coords_PDB_msd(
             atoms_poly = [i.element._symbol for i in pdb.topology.atoms()]
             if repeat_units[i] > 1:
                 poly_atom_ind = [
-                    i for i, e in enumerate(atoms_poly) if e in ["C", "O", "S", "N", "Si", "Br"]
+                    i for i, e in enumerate(atoms_poly) if e in ["O", "S", "N", "Si", "Br"]
                 ]
                 poly_counter.append(len(poly_atom_ind) // int(repeat_units[i]))
             else:
                 poly_atom_ind = [
-                    i for i, e in enumerate(atoms_poly) if e in ["C", "O", "S", "N", "Si", "Br"]
+                    i for i, e in enumerate(atoms_poly) if e in ["O", "S", "N", "Si", "Br"]
                 ]
                 poly_counter.append(len(poly_atom_ind))
 
@@ -779,7 +779,7 @@ def get_coords_PDB_msd(
                             elif 'AN' in line[17:20]:
                                 atom_names.append(values[-1] + f",{mol}")
                 if "PL" in mol and mol in line and "PL" in line[17:20]:
-                    if values[-1].lower() in ["c", "o", "s", "n", "si", "br"]:
+                    if values[-1].lower() in ["o", "s", "n", "si", "br"]:
                         if poly_ind % poly_counter[int(mol[-1])-1] == 0:
                             x = float(line[30:38])
                             y = float(line[38:46])
@@ -1071,9 +1071,7 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, cat_idxs] - start_cat
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in tqdm(
-            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
-        ):
+        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
             start_cat = xyz[origin, cat_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, cat_idxs] - start_cat
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1146,9 +1144,7 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, ani_idxs] - start_ani
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in tqdm(
-            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
-        ):
+        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
             start_ani = xyz[origin, ani_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, ani_idxs] - start_ani
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1212,9 +1208,7 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, solv_idxs] - start_solv
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in tqdm(
-            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
-        ):
+        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
             start_solv = xyz[origin, solv_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, solv_idxs] - start_solv
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1264,9 +1258,7 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, poly_idxs] - start_poly
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in tqdm(
-            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
-        ):
+        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
             poly_solv = xyz[origin, poly_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, poly_idxs] - poly_solv
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1647,7 +1639,7 @@ def plot_calc_rdf(
         cell_lengths = np.array([cell[0, 0], cell[1, 1], cell[2, 2]])
         idxs = np.array(list(itertools.product(idxs_one, idxs_two)))
         dist_mat = np.zeros(shape=(num_frames, idxs.shape[0]), dtype=np.float32)
-        for ii, idx in enumerate(tqdm(idxs)):
+        for ii, idx in enumerate(idxs):
             if idx[0] == idx[1]:
                 dist_mat[:, ii] = 1e10
                 continue

@@ -27,7 +27,7 @@ def run(
     system:str,
     simu_temp:float,
     atom_count:int,
-    mol_fracs:list,
+    mol_ratios:list,
     simu_length:int,
     md_save_time:int,
     hitpoly_path:str,
@@ -61,13 +61,13 @@ def run(
     atoms_long_list = []
     param_dict_list = []
 
-    concentration, solvent_count, repeats, weight_prcnt, total_atoms = get_concentraiton_from_molality_multi_system(
+    concentration, solvent_count, repeats, weight_prcnt, total_atoms, poly_name = get_concentraiton_from_molality_multi_system(
         smiles=smiles,
         molality=molality,
         system=system,
         atom_count=atom_count,
         polymer_chain_length=polymer_chain_length,
-        mol_fracs=mol_fracs,
+        mol_ratios=mol_ratios,
         salt_smiles='.'.join(salt_smiles),
     )
 
@@ -243,6 +243,7 @@ def run(
             simu_temperature=simu_temp,
             prod_run_time=simu_length,
             ani_name_rdf=ani_name_rdf,
+            poly_name=','.join(poly_name),
         )
 
     elif simu_type.lower() == "tg":
@@ -268,7 +269,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s",
         "--smiles_path",
-        help="Smiles of the polymer to be created, of the form [Cu]*[Au]",
+        help="Path of the file that contains the smiles strings to be created, if more than one, have them '.' separated, and the second line should be the mole fraction ratios of the smiles strings, ex, 'C1.C2.C3', '0.5,0.3,0.2'",
     )
     parser.add_argument(
         "--salt_type",
@@ -339,11 +340,11 @@ if __name__ == "__main__":
         lines = f.readlines()
         smiles = lines[0].split(".")
         if len(smiles) > 1:
-            mol_fracs = lines[1].split(",")
-            mol_fracs = [float(i) for i in mol_fracs]
-            assert len(smiles) == len(mol_fracs)
+            mol_ratios = lines[1].split(",")
+            mol_ratios = [float(i) for i in mol_ratios]
+            assert len(smiles) == len(mol_ratios)
         else:
-            mol_fracs = None
+            mol_ratios = None
     
     if args.atom_count == "None":
         atom_count = None
@@ -371,7 +372,7 @@ if __name__ == "__main__":
         simu_length=int(args.simu_length),
         platform=args.platform,
         polymer_chain_length=polymer_chain_length,
-        mol_fracs=mol_fracs,
+        mol_ratios=mol_ratios,
         hitpoly_path=args.hitpoly_path,
         simu_type=args.simu_type,
     )

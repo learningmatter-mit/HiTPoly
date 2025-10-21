@@ -1265,7 +1265,8 @@ def write_analysis_script(
     simu_temperature,
     prod_run_time,
     xyz_output=25,  # ps
-    ani_name_rdf=None,
+    ani_name_rdf="None",
+    poly_name="None",
 ):
     if platform == "supercloud":
         with open(f"{results_path}/run_analysis.sh", "w") as f:
@@ -1283,7 +1284,7 @@ def write_analysis_script(
             )
             f.write(
                 f" --repeat_units {','.join(str(i) for i in repeat_units)} -n $NAME -f {xyz_output} -temp {simu_temperature}"
-                + f" --platform {platform} --cat {cation} --ani {anion} --ani_rdf {ani_name_rdf} \n"
+                + f" --platform {platform} --cat {cation} --ani {anion} --ani_rdf {ani_name_rdf} --poly {poly_name}\n"
             )
 
     elif platform == "engaging":

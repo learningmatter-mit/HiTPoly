@@ -1,6 +1,7 @@
 from hitpoly.writers.box_builder import create_long_smiles, get_atom_count, get_mol_mass
 import numpy as np
 from typing import List, Tuple
+from rdkit import Chem
 
 def calculate_box_numbers(
     smiles,
@@ -179,7 +180,7 @@ def get_concentraiton_from_molality_multi_system(
     system:str="liquid",
     atom_count:int=None,# 15k for liquids, 25k for polymers
     polymer_chain_length:int=None,
-    mol_fracs:list=None,
+    mol_ratios:list=None,
     salt_smiles:str="O=S(=O)(NS(=O)(=O)C(F)(F)F)C(F)(F)F.[Li]" # LiTFSI,
 ):
     if not atom_count:
@@ -194,30 +195,31 @@ def get_concentraiton_from_molality_multi_system(
                     raise ValueError("Polymer must contain [Cu] and [Au]")
             atom_count = 22000
         elif system == "gel":
-            if not mol_fracs:
-                raise ValueError("Mole fraction (mol_fracs) ratio must be provided for gel")
-            if np.array(mol_fracs).sum() != 1:
-                raise ValueError("Mole fraction (mol_fracs) ratio must sum to 1")
-            if len(mol_fracs) != len(smiles):
-                raise ValueError("Mole fraction (mol_fracs) ratio must have the same length as smiles")
+            if not mol_ratios:
+                raise ValueError("Mole fraction (mol_ratios) ratio must be provided for gel")
+            if np.array(mol_ratios).sum() != 1:
+                raise ValueError("Mole fraction (mol_ratios) ratio must sum to 1")
+            if len(mol_ratios) != len(smiles):
+                raise ValueError("Mole fraction (mol_ratios) ratio must have the same length as smiles")
             atom_count = 19000
         else:
             raise ValueError("System must be either liquid, polymer or gel")
     
     if system == "liquid" or system == "polymer":
-        if mol_fracs or len(smiles)>1:
-            if np.array(mol_fracs).sum() != 1:
-                raise ValueError("Mole fraction (mol_fracs) ratio must sum to 1")
-            if len(mol_fracs) != len(smiles):
-                raise ValueError("Mole fraction (mol_fracs) ratio must have the same length as smiles")
+        if mol_ratios or len(smiles)>1:
+            if np.array(mol_ratios).sum() != 1:
+                raise ValueError("Mole fraction (mol_ratios) ratio must sum to 1")
+            if len(mol_ratios) != len(smiles):
+                raise ValueError("Mole fraction (mol_ratios) ratio must have the same length as smiles")
 
-    
+    poly_name = []
     atom_count_solvent = []
     mol_mass = []
     repeat_units = []
     for ind, smile in enumerate(smiles):
         if "[Cu]" in smile and "[Au]" in smile:
-            atom_count_monomer = get_atom_count(smile.replace("[Cu]", "").replace("[Au]", ""))
+            temp_smile = smile.replace("[Cu]", "").replace("[Au]", "")
+            atom_count_monomer = get_atom_count(temp_smile)
             if not polymer_chain_length:
                 polymer_chain_length = 1100
             repeat_units.append(round(
@@ -230,15 +232,17 @@ def get_concentraiton_from_molality_multi_system(
             # print(f"Chain length for {smiles[ind]}, atoms: ", get_atom_count(smile))
             atom_count_solvent.append(get_atom_count(smile))
             mol_mass.append(get_mol_mass(smile))
+            poly_name.append(Chem.MolFromSmiles(temp_smile).GetAtomWithIdx(0).GetSymbol())
         else:
             repeat_units.append(1)
             atom_count_solvent.append(get_atom_count(smile))
             mol_mass.append(get_mol_mass(smile))
+            poly_name.append(Chem.MolFromSmiles(smile).GetAtomWithIdx(0).GetSymbol())
     mol_mass = np.array(mol_mass)
     atom_count_solvent = np.array(atom_count_solvent)
 
     if len(smiles)>1:
-        number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_atoms(mol_mass, atom_count_solvent, mol_fracs, atom_count)
+        number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_atoms(mol_mass, atom_count_solvent, mol_ratios, atom_count)
         concentration = (molality * mol_mass.dot(number_of_molecules) / 1000).astype(int)
         total_atoms = get_atom_count(salt_smiles)*concentration+number_of_molecules.dot(atom_count_solvent)
     else:
@@ -248,4 +252,4 @@ def get_concentraiton_from_molality_multi_system(
         total_atoms = get_atom_count(salt_smiles)*concentration+number_of_molecules[0]*atom_count_solvent[0]
 
     print(f"Concentration: {concentration}, number_of_molecules: {number_of_molecules}, repeat_units: {repeat_units}, weight_prcnt: {weight_prcnt}, total_atoms: {total_atoms}")
-    return [concentration, concentration], number_of_molecules.tolist(), repeat_units, weight_prcnt, total_atoms
+    return [concentration, concentration], number_of_molecules.tolist(), repeat_units, weight_prcnt, total_atoms, poly_name

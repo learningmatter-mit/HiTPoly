@@ -126,20 +126,28 @@ def run(
         name=name,
     )
 
+    ### TODO: RDF analysis currently works only for one cation and one anion
     one_name = [f"{cat_name[0]}-CA1"]
     coord_atoms = ["O", "S", "N", "Br", "P", "Si"]
-    names_temp = ["solv_all", "O_poly", "others_poly"]
+    names_temp = ["solv_all","solv_poly", "O_poly", "others_poly"]
     two_names = []
     names = []
     for i in range(len(repeat_units)):
+        temp_names = [j+"-PL"+str(i+1) for j in coord_atoms]
+        for j in ani_name_rdf:
+            temp_names.append(f"{j}-AN1")
+        two_names.append(temp_names)
         two_names.append([j+"-PL"+str(i+1) for j in coord_atoms])
         two_names.append(["O"+"-PL"+str(i+1)])
         two_names.append([j+"-PL"+str(i+1) for j in coord_atoms if j != "O"])
         names.extend([j+"_PL"+str(i+1) for j in names_temp])
-    for i in ani_name_rdf:
-        two_names.append([f"{i}-AN1"])
-        two_names[0].append(f"{i}-AN1")
-        names.append(f"{i}_ani")
+
+    two_names.append([f"{i}-AN1" for i in ani_name_rdf])
+    names.append(f"Ani_all")
+    all_names = set([x for xs in two_names for x in xs])
+    two_names.append(list(all_names))
+    names.append("solv_all_all")
+    assert len(names) == len(two_names)
 
     frame = "end"
     xyz_rdf, atom_names_rdf, atom_names_long_rdf, residue_ids = read_xyz(
@@ -160,7 +168,7 @@ def run(
         temperature=temperature,
     )
 
-    # convex hull coordination analysis
+    # convex hull coordination analysis, should work for multiple anions
     atom_names_rdf = np.array(atom_names_rdf)
     atom_names_long_rdf = np.array(atom_names_long_rdf)
 

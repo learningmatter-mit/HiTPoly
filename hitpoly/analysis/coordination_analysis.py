@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pymatgen.core import Structure, Lattice
 import matplotlib
+import matplotlib.colors as mcolors
 
 
 plt.rc("text", usetex=True)
@@ -136,10 +137,10 @@ def return_atomtypes_numberneighbors(data):
             num_neighs.add(num_neighbors)
             for neighbor in data[i][j]["nlist"]:
                 label_prefix = neighbor.label.split(" ")[0]
-                if label_prefix == "AN1":
-                    coord_env.add(f"{str(neighbor.specie)}-AN")
-                elif label_prefix == "PL1":
-                    coord_env.add(f"{str(neighbor.specie)}-PL")
+                # if label_prefix == "AN1":
+                coord_env.add(f"{str(neighbor.specie)}-{label_prefix}")
+                # elif label_prefix == "PL1":
+                #     coord_env.add(f"{str(neighbor.specie)}-PL")
 
     coord_env = list(coord_env)
     num_neighs = list(num_neighs)
@@ -168,8 +169,7 @@ def make_barplot_coordination_atomtypes(
                 for k in range(len(data[i][j]["nlist"])):
                     if str(data[i][j]["nlist"][k].specie) == coord_env[l].split("-")[0]:
                         if (
-                            data[i][j]["nlist"][k].label[0]
-                            + data[i][j]["nlist"][k].label[1]
+                            data[i][j]["nlist"][k].label[:3]
                             == coord_env[l].split("-")[1]
                         ):
                             count_env[l] += 1
@@ -242,20 +242,15 @@ chain prevalence,unique anions,mean anion distance,anion prevalence\n')
     neighbors_average = dict(sorted(neighbors_average.items()))
     colors_list = []
     for label, spec in neighbors_average.items():
-        if label == "O-AN":
-            colors_list.append("firebrick")
-        elif label == "N-AN":
-            colors_list.append("cornflowerblue")
-        elif label == "O-PL":
-            colors_list.append("tomato")
-        elif label == "N-PL":
-            colors_list.append("lightblue")
-        elif label == "S-PL":
-            colors_list.append("gold")
-        elif label == "Si-PL":
-            colors_list.append("mediumorchid")
-        elif label == "Cl-PL":
-            colors_list.append("green")
+        # For reproducibility and consistent color mapping, get a unique sorted list of labels outside the loop
+        # Suppose neighbors_average_keys is a sorted list of all possible labels (e.g. list(neighbors_average.keys()))
+        # Here we cache the color assignment on first run
+        if "label_color_map" not in locals():
+            palette = sns.color_palette("tab10", n_colors=len(neighbors_average.keys()))
+            neighbors_average_keys = sorted(neighbors_average.keys())
+            label_color_map = {lab: mcolors.to_hex(palette[i]) for i, lab in enumerate(neighbors_average_keys)}
+
+        colors_list.append(label_color_map[label])
 
     coord_number, freq = np.unique(distance_coord[:, 0], return_counts=True)
     total_sum = np.sum(freq)
