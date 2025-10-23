@@ -89,7 +89,7 @@ def run(
     )
 
     xyz_msd_unwrp = unwrap_all(xyz_msd, cell)
-    cat_ani_index = [ind for ind, j in enumerate(atom_names_long_msd) if "PL1" not in j]
+    cat_ani_index = [ind for ind, j in enumerate(atom_names_long_msd) if "PL" not in j]
     xyz_msd_corr = xyz_msd_unwrp[:, cat_ani_index].copy()
 
     for i in poly_names:
@@ -114,6 +114,7 @@ def run(
     )
 
     atom_names_long_msd = [i for i in atom_names_long_msd if "PL" not in i]
+
     plot_calc_corr(
         xyz=xyz_msd_corr,
         folder=folder,

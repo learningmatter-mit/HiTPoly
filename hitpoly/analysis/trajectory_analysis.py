@@ -1596,7 +1596,11 @@ def plot_calc_rdf(
     plot_names: list = None,
 ):
     coord_numbers = []
-    save_names = []
+
+    duration = names[0].split("_")[-1]
+    with open(f"{folder}/coord_vals_{duration}.txt", "w") as f:
+        f.write("names,coordination_number\n")
+
     for i, two_name in enumerate(two_names):
         figsize = (6, 5)
         fig_scalingfactor = figsize[1] / 5
@@ -1660,10 +1664,9 @@ def plot_calc_rdf(
         center_val = centers[min_idx]
         coord_val = coord[min_idx]
         coord_numbers.append(coord_val)
-        if names:
-            save_names.append(names[i])
-        else:
-            save_names.append("_".join(two_name))
+
+        with open(f"{folder}/coord_vals_{duration}.txt", "a") as f:
+            f.write(f"{names[i]},{coord_val}\n")
 
         axs.plot(centers, gr, linewidth=3, label=r"$g(r)$", color="blue")
 
@@ -1735,12 +1738,6 @@ def plot_calc_rdf(
             plt.savefig(f"{folder}/RDF_{i}.png", dpi=dpi)
         plt.show()
 
-    if folder:
-        duration = names[0].split("_")[-1]
-        with open(f"{folder}/coord_vals_{duration}.txt", "w") as f:
-            f.write("names,coordination_number\n")
-            for name, coord in zip(names, coord_numbers):
-                f.write(f"{name},{coord},\n")
 
 
 def plot_calc_corr(
@@ -2166,6 +2163,7 @@ def compute_fft_onsager(complete_disp_matrix):
     displacements_final_diffusion_ions = complete_disp_matrix.transpose(1, 0, 2)
     dt_indices = np.arange(0, n_dt)
     msd_matrix = []
+
     for i in tqdm(range(n_ions)):
         msd_by_pairs = np.empty([0, n_dt])  # Shape of n_pairs * n_dt
         # print(f"working on column {i}th")
