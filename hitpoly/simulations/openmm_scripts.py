@@ -1,6 +1,9 @@
 from sys import stdout
 import os
 
+from openmm.unit import kelvin
+import numpy as np
+
 from openmm.app import (
     PDBFile,
     Modeller,
