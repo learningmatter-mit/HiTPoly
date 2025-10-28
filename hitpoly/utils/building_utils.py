@@ -73,7 +73,11 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
         salt_data_paths = [
             f"{hitpoly_path}/data/forcefield_files/lammps_Na_q100.data",
         ]
-        concentration = [concentration, concentration]
+        if anion == "TETRAORION":
+            anion_count = int(concentration/4)
+            concentration = [4*anion_count, anion_count]
+        else:
+            concentration = [concentration, concentration]
     elif cation == "Li":
         salt_smiles = ["[Li+]"]
         salt_paths = [
@@ -82,7 +86,11 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
         salt_data_paths = [
             f"{hitpoly_path}/data/forcefield_files/lammps_Li_q100.data",
         ]
-        concentration = [concentration, concentration]
+        if anion == "TETRAORION":
+            anion_count = int(concentration/4)
+            concentration = [anion_count*4, anion_count]
+        else:
+            concentration = [concentration, concentration]
     elif cation == "Zn":
         salt_smiles = ["[Zn++]"]
         salt_paths = [
@@ -91,7 +99,11 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
         salt_data_paths = [
             f"{hitpoly_path}/data/forcefield_files/lammps_Zn_q100.data",
         ]
-        concentration = [concentration, concentration*2]
+        if anion == "TETRAORION":
+            anion_count = int(concentration/2)
+            concentration = [2*anion_count, anion_count]
+        else:
+            concentration = [concentration, concentration*2]
     else:
         raise ValueError(f"Cation {cation} not supported")
     
@@ -110,6 +122,11 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
         salt_paths.append(f"{salt_path}/geometry_file_FSI.pdb")
         salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_FSI_q100.data")
         ani_name_rdf = "N,O"
+    elif anion == "TETRAORION":
+        salt_smiles.append("O=S(=O)([N-]S(=O)(=O)C(F)(F)C(F)(F)OC(F)C(F)(F)SCC(CSC(F)(F)C(F)OC(F)(F)C(F)(F)S(=O)(=O)[N-]S(=O)(=O)C(F)(F)F)(CSC(F)(F)C(F)OC(F)(F)C(F)(F)S(=O)(=O)[N-]S(=O)(=O)C(F)(F)F)CSC(F)(F)C(F)OC(F)(F)C(F)(F)S(=O)(=O)[N-]S(=O)(=O)C(F)(F)F)C(F)(F)F")
+        salt_paths.append(f"{salt_path}/geometry_file_TETRAORION.pdb")
+        salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_TETRAORION_q100.data")
+        ani_name_rdf = "O,N"
     else:
         raise ValueError(f"Anion {anion} not supported")
 

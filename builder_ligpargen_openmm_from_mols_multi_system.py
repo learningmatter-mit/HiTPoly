@@ -22,7 +22,7 @@ def run(
     smiles:list,
     charge_scale:float,
     salt_type:str,
-    molality:float,
+    alkali_count:int,
     charges:str,
     polynames:list,
     lit_charges_save_path:str,
@@ -46,7 +46,7 @@ def run(
 
     if salt_type:
         salt_smiles, salt_paths, salt_data_paths, ani_name_rdf, concentration = salt_string_to_values(
-            hitpoly_path, salt_type, 0)
+            hitpoly_path, salt_type, alkali_count)
         salt = True
     else:
         salt = False
@@ -63,15 +63,21 @@ def run(
     atoms_long_list = []
     param_dict_list = []
 
-    concentration, solvent_count, repeats, weight_prcnt, total_atoms, poly_name = get_concentraiton_from_molality_multi_system(
-        smiles=smiles,
-        molality=molality,
-        system=system,
-        atom_count=atom_count,
-        polymer_chain_length=polymer_chain_length,
-        mol_ratios=mol_ratios,
-        salt_smiles='.'.join(salt_smiles),
-    )
+    """
+    specifying the specific parameters for this simulation.
+    """
+    solvent_count = mol_ratios
+    poly_name = "PLY"
+    repeats = [1] * len(smiles)
+
+    print(f"Concentration: {concentration}, solvent_count: {solvent_count}, repeats: {repeats}, poly_name: {poly_name}")
+    print("--------------------------------")
+    print("smiles: ", smiles)
+    print(f"System: {system}")
+    print(f"Atom count: {atom_count}")
+    print(f"Polymer chain length: {polymer_chain_length}")
+    print(f"Mol ratios: {mol_ratios}")
+    print(f"Salt smiles: {salt_smiles}")
 
     with open(f"{save_path}/repeats.txt", "w") as f:
         f.write(str(repeats))
@@ -281,9 +287,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-M",
-        "--molality_salt",
-        help="Molality of salt in mol/kg",
-        default="1",
+        "--alkali_count",
+        help="number of alkali metal",
+        default="100",
     )
     parser.add_argument(
         "-cs",
@@ -347,18 +353,18 @@ if __name__ == "__main__":
     with open(args.smiles_path, "r") as f:
         lines = f.readlines()
         smiles = lines[0].split(".")
-        if len(smiles) > 1:
-            mol_ratios = lines[1].split(",")
-            mol_ratios = [float(i) for i in mol_ratios]
-            assert len(smiles) == len(mol_ratios)
-        else:
-            mol_ratios = None
+        mol_ratios = lines[1].split(",")
+        mol_ratios = [int(i) for i in mol_ratios]
+        assert len(smiles) == len(mol_ratios)
+
         if len(lines) == 3:
             """
-            3rd line is the DFT charge CSV file name for each molecule.
+            3rd line is the DFT charge CSV file path for each molecule.
             This line is optional.
             """
             polynames = lines[2].split(",")
+            print(polynames)
+            #assert len(smiles) == len(polynames)
     
     if args.atom_count == "None":
         atom_count = None
@@ -370,7 +376,8 @@ if __name__ == "__main__":
     else:
         polymer_chain_length = int(args.polymer_chain_length)
     if args.charge_type == "LIT":
-        print("polynames: ", polynames)
+        print(polynames)
+        #assert len(polynames) == len(smiles)
     else:
         polynames = None
 
@@ -380,7 +387,7 @@ if __name__ == "__main__":
         smiles=smiles,
         charge_scale=float(args.charge_scale),
         salt_type=args.salt_type,
-        molality=float(args.molality_salt),
+        alkali_count=int(args.alkali_count),
         charges=args.charge_type,
         polynames=polynames,
         lit_charges_save_path=args.lit_charges_save_path,
