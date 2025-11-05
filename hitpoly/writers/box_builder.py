@@ -195,15 +195,15 @@ def create_ligpargen(
     if not resid_name:
         resid_name = "PLY"
 
-    # if platform == "local":
-    #     os.chdir(ligpargen_path)
-    #     command = f"$LigParGen -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l"
-    #     subprocess.run(command, shell=True)
-    #     os.chdir(hitpoly_path)
-    # elif platform == "supercloud":
-    #     supercloud_ligpargen(ligpargen_path, resid_name)
-    # elif platform == "perlmutter":
-    #     perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix)
+    if platform == "local":
+        os.chdir(ligpargen_path)
+        command = f"$LigParGen -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l"
+        subprocess.run(command, shell=True)
+        os.chdir(hitpoly_path)
+    elif platform == "supercloud":
+        supercloud_ligpargen(ligpargen_path, resid_name)
+    elif platform == "perlmutter":
+        perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix)
 
     return mol_initial, smiles_initial
 
