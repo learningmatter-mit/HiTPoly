@@ -1,6 +1,7 @@
 from sys import stdout
 import os
-
+import time
+from rdkit import Chem
 from openmm.app import (
     PDBFile,
     Modeller,
@@ -40,11 +41,11 @@ def iniatilize_simulation(
     )
 
     if polymer:
-        packed_name = "polymer_conformation"
+        packed_name = polymer
     else:
-        packed_name = "packed_box"
-    pdb = PDBFile(f"{save_path}/{packed_name}.pdb")
-
+        packed_name = "packed_box.pdb"
+    pdb = PDBFile(f"{save_path}/{packed_name}")
+    print(f"Loading {packed_name} simulation file")
     bondDefinitionFiles = [f"{save_path}/force_field_resids.xml"]
     for ff in bondDefinitionFiles:
         pdb.topology.loadBondDefinitions(ff)
@@ -55,6 +56,11 @@ def iniatilize_simulation(
         modeller = Modeller(pdb.topology, equlibrated_state.getPositions())
     else:
         modeller = Modeller(pdb.topology, pdb.positions)
+        
+    # God knows how much I don't want to have something like this here,
+    # but when once in a blue moon and error occurs that is solved only by 
+    # waiting for 5 seconds, I'm going to have it here.
+    time.sleep(5)
 
     forceFieldFiles = [f"{save_path}/force_field.xml"]
     forcefield = ForceField(*forceFieldFiles)
@@ -256,17 +262,50 @@ def equilibrate_polymer(
             cuda_device=cuda_device,
             equilibration=False,
             timestep=0.0005,
-            polymer=True,
+            polymer=name,
         )
     )
     print("Minimizing energy and saving polymer positions")
-    simulation.minimizeEnergy()
+    for i in range(5):
+        simulation.minimizeEnergy()
+
     minpositions = simulation.context.getState(getPositions=True).getPositions(
         asNumpy=True
     )
 
-    with open(f"{save_path}/{name}.pdb", "w") as f:
+    with open(f"{save_path}/{name}", "w") as f:
         PDBFile.writeFile(modeller.topology, minpositions, f)
+
+    mol = Chem.MolFromPDBFile(f"{save_path}/{name}", removeHs=False)
+    if mol:
+        print("Polymer has been minimized and saved")
+    else:
+        print("Trying to minimize polymer again")
+        counter = 1
+        simulation.reporters.append(
+            StateDataReporter(
+                stdout,
+                mdOutputTime,
+                step=True,
+                potentialEnergy=True,
+                temperature=True,
+            )
+        )
+        while counter < 10 or not mol:
+            integrator.setTemperature(20*counter * kelvin)
+            simulation.step(20000)
+            minpositions = simulation.context.getState(getPositions=True).getPositions(
+                asNumpy=True
+            )
+
+            with open(f"{save_path}/{name}", "w") as f:
+                PDBFile.writeFile(modeller.topology, minpositions, f)
+            mol = Chem.MolFromPDBFile(f"{save_path}/{name}", removeHs=False)
+            counter += 1
+    if not mol:
+        print("Polymer has not been minimized and saved, code exiting")
+
+
 
 
 def equilibrate_system_1(

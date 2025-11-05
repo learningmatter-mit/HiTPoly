@@ -195,15 +195,15 @@ def create_ligpargen(
     if not resid_name:
         resid_name = "PLY"
 
-    if platform == "local":
-        os.chdir(ligpargen_path)
-        command = f"$LigParGen -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l"
-        subprocess.run(command, shell=True)
-        os.chdir(hitpoly_path)
-    elif platform == "supercloud":
-        supercloud_ligpargen(ligpargen_path, resid_name)
-    elif platform == "perlmutter":
-        perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix)
+    # if platform == "local":
+    #     os.chdir(ligpargen_path)
+    #     command = f"$LigParGen -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l"
+    #     subprocess.run(command, shell=True)
+    #     os.chdir(hitpoly_path)
+    # elif platform == "supercloud":
+    #     supercloud_ligpargen(ligpargen_path, resid_name)
+    # elif platform == "perlmutter":
+    #     perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix)
 
     return mol_initial, smiles_initial
 
@@ -523,6 +523,7 @@ def create_packmol_input_file(
     mol_list = []
     single_vol = 0
     all_paths = poly_paths + salt_paths if salt_paths else poly_paths
+    
     for i in all_paths:
         mol = Chem.MolFromPDBFile(i, removeHs=False)
         mol_list.append(mol)
@@ -657,11 +658,11 @@ def load_pdb_create_mol_dict(
     polymer=False,
 ):
     if polymer:
-        packed_name = "polymer_conformation"
+        packed_name = polymer
     else:
-        packed_name = "packed_box"
+        packed_name = "packed_box.pdb"
 
-    pdb_file = PDBFile(f"{save_path}/{packed_name}.pdb")
+    pdb_file = PDBFile(f"{save_path}/{packed_name}")
     mol_dict = {}
     for mol in pdb_file.topology.chains():
         temp_atoms = []
@@ -1144,7 +1145,7 @@ def minimize_polymer(
     )
 
     mol_dict, pdb_file = load_pdb_create_mol_dict(
-        save_path, train_dataset, polymer=True
+        save_path, train_dataset, polymer=name
     )
 
     atom_dict, atom_types_list = atom_name_reindexing(mol_dict)
@@ -1166,8 +1167,9 @@ def minimize_polymer(
     ff_file, ff_file_resid, name_iterables = creating_ff_and_resid_files(
         mol_dict, atom_types_list
     )
+
     write_openmm_files(
-        save_path, pdb_file, ff_file, ff_file_resid, name_iterables, polymer=True
+        save_path, pdb_file, ff_file, ff_file_resid, name_iterables, polymer=name
     )
     print("Temp polymer force field built!")
     equilibrate_polymer(
@@ -1706,9 +1708,9 @@ def write_openmm_files(
     polymer=False,
 ):
     if polymer:
-        packed_name = "polymer_conformation"
+        packed_name = polymer
     else:
-        packed_name = "packed_box"
+        packed_name = "packed_box.pdb"
 
     print(f"Writting Force field files at {save_path}")
     with open(f"{save_path}/force_field.xml", "w") as f:
@@ -1724,20 +1726,20 @@ def write_openmm_files(
             chain._residues[ind].name = name  # chain.id
 
     print("Saving the pdb file with the packed polymer.")
-    with open(f"{save_path}/{packed_name}.pdb", "w") as f:
+    with open(f"{save_path}/{packed_name}", "w") as f:
         pdb_file.writeFile(
             topology=pdb_file.topology,
             positions=pdb_file.positions,
             file=f,
         )
     print("Rewriting the packed box file with removing the connectivity")
-    with open(f"{save_path}/{packed_name}.pdb", "r") as f:
+    with open(f"{save_path}/{packed_name}", "r") as f:
         lines = f.readlines()
         new_lines = []
         for i in lines:
             if "CONECT" not in i:
                 new_lines.append(i)
-    with open(f"{save_path}/{packed_name}.pdb", "w") as f:
+    with open(f"{save_path}/{packed_name}", "w") as f:
         for i in new_lines:
             f.write(i)
 

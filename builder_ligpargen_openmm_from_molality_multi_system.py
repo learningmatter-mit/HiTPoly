@@ -143,6 +143,7 @@ def run(
             long_smiles,
             name=name,
         )
+        # minimize = False
         
         print(f"Saved conformer pdb.")
 
@@ -150,11 +151,11 @@ def run(
             minimize_polymer(
                 save_path=save_path,
                 long_smiles=long_smiles,
-                atoms_long=atoms_long,
-                atoms_short=atoms,
-                atom_names_short=atom_names,
-                atom_names_long=atom_names_long,
-                param_dict=param_dict,
+                atoms_long=[atoms_long],
+                atoms_short=[atoms],
+                atom_names_short=[atom_names],
+                atom_names_long=[atom_names_long],
+                param_dict=[param_dict],
                 lit_charges_save_path=None,
                 charges=charges,
                 name=name,
@@ -197,7 +198,6 @@ def run(
         os.makedirs(final_save_path)
 
     if system == "polymer" or system == "gel":
-
         equilibrate_system_1(
             save_path=save_path,
             final_save_path=final_save_path,

@@ -27,10 +27,16 @@ def calculate_box_numbers(
         get_atom_count(long_smiles, salt_smiles, polymer_count, concentration),
     )
 
-    print(
-        "Repeat unit molecular mass",
-        get_mol_mass(smiles.replace("[Cu]", "").replace("[Au]", "")),
-    )
+    try:
+        print(
+            "Repeat unit molecular mass",
+            get_mol_mass(smiles.replace("[Cu]", "").replace("[Au]", "")),
+        )
+    except:
+        print(
+            "Repeat unit molecular mass",
+            get_mol_mass(smiles.replace("[Cu]", "C").replace("[Au]", "C")),
+        )
 
   # molality
     print(
@@ -218,8 +224,14 @@ def get_concentraiton_from_molality_multi_system(
     repeat_units = []
     for ind, smile in enumerate(smiles):
         if "[Cu]" in smile and "[Au]" in smile:
-            temp_smile = smile.replace("[Cu]", "").replace("[Au]", "")
-            atom_count_monomer = get_atom_count(temp_smile)
+            try:
+                temp_smile = smile.replace("[Cu]", "").replace("[Au]", "")
+                atom_count_monomer = get_atom_count(temp_smile)
+            except:
+                temp_smile = smile.replace("[Cu]", "C").replace("[Au]", "C")
+                atom_count_monomer = get_atom_count(temp_smile)
+                print("Replacing end groups with carbons to avoid syntax errors for", temp_smile)
+            
             if not polymer_chain_length:
                 polymer_chain_length = 1100
             repeat_units.append(round(
