@@ -122,7 +122,7 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
     return salt_smiles, salt_paths, salt_data_paths, ani_name_rdf, concentration
 
 
-def calculate_composition_by_atoms(
+def calculate_composition_by_mol_fractions(
     molecular_weights: 'List[float]',
     atoms_per_molecule: 'List[int]',
     mole_fractions: 'List[float]',
@@ -179,7 +179,7 @@ def calculate_composition_by_atoms(
     
     return np.array(number_of_molecules), mol_prcnt, weight_prcnt
 
-def calculate_composition_by_weight(
+def calculate_composition_by_weight_fractions(
     molecular_weights: 'List[float]',
     atoms_per_molecule: 'List[int]',
     weight_fractions: 'List[float]',
@@ -201,9 +201,6 @@ def calculate_composition_by_weight(
             - mol_percent (list[float]): The resulting mole percent for each component (from realized counts).
             - weight_percent (list[float]): The resulting weight percent for each component (from realized counts).
     """
-    # Guard: handle empty or zero-sum inputs
-    if not molecular_weights or not atoms_per_molecule or not weight_fractions:
-        return np.array([]), [], []
 
     # Normalize weight fractions if they don't sum to 1 due to numerical noise
     total_w = float(sum(weight_fractions))
@@ -332,9 +329,9 @@ def get_concentraiton_from_molality_multi_system(
 
     if len(smiles)>1:
         if ratios_type == "mol":
-            number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_atoms(mol_mass, atom_count_solvent, ratios, atom_count)
+            number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_mol_fractions(mol_mass, atom_count_solvent, ratios, atom_count)
         elif ratios_type == "weight":
-            number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_weight(mol_mass, atom_count_solvent, ratios, atom_count)
+            number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_weight_fractions(mol_mass, atom_count_solvent, ratios, atom_count)
         else:
             raise ValueError("Ratios type must be either mol or weight")
         concentration = (molality * mol_mass.dot(number_of_molecules) / 1000).astype(int)
