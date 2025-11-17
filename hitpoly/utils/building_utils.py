@@ -328,9 +328,9 @@ def get_concentraiton_from_molality_multi_system(
     atom_count_solvent = np.array(atom_count_solvent)
 
     if len(smiles)>1:
-        if ratios_type == "mol":
+        if "mol" in ratios_type:
             number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_mol_fractions(mol_mass, atom_count_solvent, ratios, atom_count)
-        elif ratios_type == "weight":
+        elif "weight" in ratios_type:
             number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_weight_fractions(mol_mass, atom_count_solvent, ratios, atom_count)
         else:
             raise ValueError("Ratios type must be either mol or weight")
