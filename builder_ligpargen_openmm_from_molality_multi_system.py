@@ -27,7 +27,8 @@ def run(
     system:str,
     simu_temp:float,
     atom_count:int,
-    mol_ratios:list,
+    ratios:list,
+    ratios_type:str,
     simu_length:int,
     md_save_time:int,
     hitpoly_path:str,
@@ -67,7 +68,8 @@ def run(
         system=system,
         atom_count=atom_count,
         polymer_chain_length=polymer_chain_length,
-        mol_ratios=mol_ratios,
+        ratios=ratios,
+        ratios_type=ratios_type,
         salt_smiles='.'.join(salt_smiles),
     )
 
@@ -336,15 +338,25 @@ if __name__ == "__main__":
     if args.hitpoly_path == "None":
         args.hitpoly_path = None
 
+    # The file from which the smiles strings are read should have the following format:
+    # [smiles_string_1].[smiles_string_2].[smiles_string_3] 
+    # [ratio_1],[ratio_2],[ratio_3]
+    # [ratios_type] # either 'mol' or 'weight', default is 'mol'
     with open(args.smiles_path, "r") as f:
         lines = f.readlines()
         smiles = lines[0].split(".")
         if len(smiles) > 1:
-            mol_ratios = lines[1].split(",")
-            mol_ratios = [float(i) for i in mol_ratios]
-            assert len(smiles) == len(mol_ratios)
+            ratios = lines[1].split(",")
+            ratios = np.array([float(i) for i in ratios])
+            ratios = (ratios / ratios.sum()).tolist()
+            if len(lines) > 2:
+                ratios_type = lines[2].strip()
+            else:
+                ratios_type = 'mol'
+            assert len(smiles) == len(ratios)
         else:
-            mol_ratios = None
+            ratios = None
+            ratios_type = None
     
     if args.atom_count == "None":
         atom_count = None
@@ -372,7 +384,8 @@ if __name__ == "__main__":
         simu_length=int(args.simu_length),
         platform=args.platform,
         polymer_chain_length=polymer_chain_length,
-        mol_ratios=mol_ratios,
+        ratios=ratios,
+        ratios_type=ratios_type,
         hitpoly_path=args.hitpoly_path,
         simu_type=args.simu_type,
     )
