@@ -1310,6 +1310,13 @@ def write_analysis_script(
     if platform == "supercloud":
         with open(f"{results_path}/run_analysis.sh", "w") as f:
             f.write("#!/bin/bash" + "\n")
+            f.write("#SBATCH --job-name=poly-md-openmm" + "\n")
+            f.write("#SBATCH --partition=xeon-p8" + "\n")
+            f.write("#SBATCH --nodes=1" + "\n")
+            f.write("#SBATCH --ntasks-per-node=1" + "\n")
+            f.write("#SBATCH --cpus-per-task=16" + "\n")
+            f.write("#SBATCH --time=1-05:00:00" + "\n")
+            f.write("\n")
             f.write("# Load modules" + "\n")
             f.write("source /etc/profile" + "\n")
             f.write("source /home/gridsan/$USER/.bashrc" + "\n")

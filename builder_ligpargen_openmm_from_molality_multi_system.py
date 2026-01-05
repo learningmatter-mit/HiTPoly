@@ -1,5 +1,7 @@
 import argparse
 import os
+import ast
+import numpy as np
 from hitpoly.writers.box_builder import *
 from hitpoly.utils.building_utils import salt_string_to_values, get_concentraiton_from_molality_multi_system
 from hitpoly.simulations.openmm_scripts import (
@@ -346,8 +348,7 @@ if __name__ == "__main__":
         lines = f.readlines()
         smiles = lines[0].split(".")
         if len(smiles) > 1:
-            ratios = lines[1].split(",")
-            ratios = np.array([float(i) for i in ratios])
+            ratios = np.array(ast.literal_eval(lines[1]))
             ratios = (ratios / ratios.sum()).tolist()
             if len(lines) > 2:
                 ratios_type = lines[2].strip()

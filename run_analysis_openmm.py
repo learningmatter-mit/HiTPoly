@@ -129,7 +129,7 @@ def run(
 
     ### TODO: RDF analysis currently works only for one cation and one anion
     one_name = [f"{cat_name[0]}-CA1"]
-    coord_atoms = ["O", "S", "N", "Br", "P", "Si"]
+    coord_atoms = ["O", "S", "N", "F"]
     names_temp = ["solv_all","solv_poly", "O_poly", "others_poly"]
     two_names = []
     names = []
@@ -179,16 +179,15 @@ def run(
         res_id=residue_ids,
         box_dim=cell[0][0],
     )
-
     data_coordination = {
         i: {
             j: {"nlist": nlist, "dist": dist, "numer_coord_O": len(nlist)}
             for j, (nlist, dist) in enumerate(
                 (
                     get_coord_environment_convex(
-                        li_idx, structurelist[i], return_dist=True, ani_name_rdf=ani_name_rdf
+                        li_idx, structurelist[i], return_dist=True, ani_name_rdf=ani_name_rdf+coord_atoms
                     )
-                    for li_idx in structurelist[i].indices_from_symbol("Li")
+                    for li_idx in structurelist[i].indices_from_symbol(one_name[0].split('-')[0])
                 )
             )
         }

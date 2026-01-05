@@ -1838,7 +1838,7 @@ def create_box_and_ff_files(
     poly_paths = [f"{save_path}/{filename}"]
 
     print(
-        f"Creating and running packmol files with {polymer_count} chains and {concentration} LiTFSIs"
+        f"Creating and running packmol files with {polymer_count} chains and {concentration} {salt_smiles}"
     )
     print(f"at {save_path} path")
     create_packmol_input_file(
@@ -1945,7 +1945,7 @@ def create_box_and_ff_files_openmm(
     poly_paths = [f"{save_path}/{name}" for name in filename]
 
     print(
-        f"Creating and running packmol files with {solvent_count} chains and {concentration} LiTFSIs"
+        f"Creating and running packmol files with {solvent_count} chains and {concentration} {salt_smiles}"
     )
     print(f"at {save_path} path")
     create_packmol_input_file(

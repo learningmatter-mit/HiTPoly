@@ -1055,7 +1055,7 @@ def plot_calc_diffu(
     cat_color = ["darkorange", "saddlebrown", "darkred"]
     ani_color = ["blue", "navy", "darkviolet"]
     solv_color = ["dimgrey", "darkgrey", "silver"]
-    poly_color = ["forestgreen", "green", "darkolivegreen"]
+    poly_color = ["forestgreen", "lime", "yellowgreen", "palegreen", "mediumaquamarine"]
     #####################################
     # Cation
     # zero origin

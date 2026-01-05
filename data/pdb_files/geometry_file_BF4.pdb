@@ -1,6 +1,6 @@
 TITLE     created by fftool
 HETATM    1 F1   BF4     1       1.545   1.533   2.279  1.00  0.00           F
-HETATM    2 B    BF4     1       2.661   2.341   2.492  1.00  0.00           B
+HETATM    2 B    BF4     1       2.661   2.341   2.492  1.00  0.00           B-
 HETATM    3 F2   BF4     1       2.391   3.634   2.046  1.00  0.00           F
 HETATM    4 F3   BF4     1       2.960   2.373   3.853  1.00  0.00           F
 HETATM    5 F4   BF4     1       3.749   1.826   1.790  1.00  0.00           F

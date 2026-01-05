@@ -110,12 +110,22 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
         salt_smiles.append("F[P-](F)(F)(F)(F)F")
         salt_paths.append(f"{salt_path}/geometry_file_PF6.pdb")
         salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_PF6_q100.data")
-        ani_name_rdf = "P,F"
+        ani_name_rdf = "F"
     elif anion == "FSI":
         salt_smiles.append("[N-](S(=O)(=O)F)S(=O)(=O)F")
         salt_paths.append(f"{salt_path}/geometry_file_FSI.pdb")
         salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_FSI_q100.data")
         ani_name_rdf = "N,O"
+    elif anion == "BF4":
+        salt_smiles.append("F[B-](F)(F)F")
+        salt_paths.append(f"{salt_path}/geometry_file_BF4.pdb")
+        salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_BF4_q100.data")
+        ani_name_rdf = "F"
+    elif anion == "NO3":
+        salt_smiles.append("O=[N+]([O-])[O-]")
+        salt_paths.append(f"{salt_path}/geometry_file_NO3.pdb")
+        salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_NO3_q100.data")
+        ani_name_rdf = "O"
     else:
         raise ValueError(f"Anion {anion} not supported")
 
@@ -277,7 +287,7 @@ def get_concentraiton_from_molality_multi_system(
         elif system == "gel":
             if not ratios:
                 raise ValueError("Ratios must be provided for gel")
-            if np.array(ratios).sum() != 1:
+            if round(np.array(ratios).sum(), 3) != 1:
                 raise ValueError("Ratios must sum to 1")
             if len(ratios) != len(smiles):
                 raise ValueError("Ratios must have the same length as smiles")
@@ -287,7 +297,7 @@ def get_concentraiton_from_molality_multi_system(
     
     if system == "liquid" or system == "polymer":
         if ratios or len(smiles)>1:
-            if np.array(ratios).sum() != 1:
+            if round(np.array(ratios).sum(), 3) != 1:
                 raise ValueError("Ratios must sum to 1")
             if len(ratios) != len(smiles):
                 raise ValueError("Ratios must have the same length as smiles")
