@@ -394,6 +394,7 @@ def get_molecule_population_matrix(
     atom_names,
     atom_names_list,
     cutoff=3.25,
+    anion_solv_atoms=1,
 ):
     """
     Function to get the population matrix of clusters across the whole
@@ -403,6 +404,7 @@ def get_molecule_population_matrix(
         cell - 3x3 matrix of the cell size (PBC)
         atom_names - long atom names loaded from the read_xyz function
         cutoff - cutoff for measuring clustering (3.25 from France-Lanord and Molinari papers)
+        anion_solv_atoms - number of anion atoms per anion molecule
     Return:
         all_mol - repeating numpy array where every three arrays is the next timestep
             clustering information, 1st line is the cation amount in cluster, 2nd line
@@ -426,6 +428,7 @@ def get_molecule_population_matrix(
     an1 = [cur.split("-")[1] == salt_types[1] for cur in np.array(atom_names)[atom_inxs]]
     # an1 = [cur.split("-")[1] == "PL1" for cur in np.array(atom_names)[atom_inxs]]
     an1 = np.nonzero(an1)[0]
+    an1_dict = {i:i//anion_solv_atoms for i in set(an1.reshape(-1))}
     orig_an1 = [
         cur.split("-")[1] == salt_types[1] and cur.split("-")[0] == salt_atoms[1]
         # cur.split("-")[1] == "PL1" and cur.split("-")[0] == "N"
@@ -455,7 +458,9 @@ def get_molecule_population_matrix(
 
         for molecule in molecules:
             num_cat = len(set(molecule).intersection(set(cations)))
-            num_an1 = len(set(molecule).intersection(set(an1.reshape(-1))))
+            ani_set = set(molecule).intersection(set(an1.reshape(-1)))
+            mapped_ani_values = [an1_dict[val] for val in ani_set]
+            num_an1 = len(set(mapped_ani_values))
             popmatrix[num_cat, num_an1] += 1
         all_mol.append(
             np.vstack(
@@ -1013,6 +1018,7 @@ def plot_calc_diffu(
     solv_name=[],
     poly_name: list = [],
     atom_names_list: list = [],
+    anion_solv_atoms = 1, #ratio of cation to anion atoms in atom_names_list
 ):
     """
     save_freq - ps
@@ -1356,7 +1362,7 @@ def plot_calc_diffu(
             f.write(
                 f"diffusivity of {ani_name[i]} is {D_ani}, with this many ions: {len(ani_idxs_list[i]), 'with linearity:', {m_ani_loglog[i]}}\n"
             )
-            conductivity += D_ani * len(ani_idxs_list[i])
+            conductivity += D_ani * len(ani_idxs_list[i])/anion_solv_atoms
         for i, D_solv in enumerate(D_solv_list):
             print(
                 "diffusivity of",
@@ -1422,6 +1428,7 @@ def plot_calc_diffu(
         atom_names=atom_names,
         atom_names_list=atom_names_list,
         cutoff=3.25,
+        anion_solv_atoms=anion_solv_atoms,
     )
 
     plot_clusters_cond(
