@@ -1526,7 +1526,11 @@ def plot_clusters_cond(
         plt.close()
 
         # this part writes the amount of clusters with neutral, positive or negative charge
-        numbers_clusters = np.sum(imshow_matr)
+        imshow_matr = imshow_matr[::-1, :]
+        total_count = 0
+        for i in range(imshow_matr.shape[0]):
+            for j in range(imshow_matr.shape[1]):
+                total_count += imshow_matr[i,j]*(i+j)
 
         freelithium_occur = 0
         neutral_occur = 0
@@ -1534,18 +1538,19 @@ def plot_clusters_cond(
         negative_occur = 0
         freetfsi_occur = 0
         for i in range(imshow_matr.shape[0]):
-            t = imshow_matr.shape[0] - 1 - i
             for j in range(imshow_matr.shape[1]):
-                if j == 0 and t > j:
-                    freelithium_occur += imshow_matr[i][j] / numbers_clusters
-                elif t == 0 and j > t:
-                    freetfsi_occur += imshow_matr[i][j] / numbers_clusters
-                elif t > j:
-                    positive_occur += imshow_matr[i][j] / numbers_clusters
-                elif t == j:
-                    neutral_occur += imshow_matr[i][j] / numbers_clusters
-                elif j > t:
-                    negative_occur += imshow_matr[i][j] / numbers_clusters
+                if j == 0 and i > j:
+                    freelithium_occur += imshow_matr[i][j]*i / total_count
+                elif i == 0 and j > i:
+                    freetfsi_occur += imshow_matr[i][j]*j / total_count
+                elif i > j:
+                    positive_occur += (imshow_matr[i][j]*(i-j)) / total_count
+                    neutral_occur += (imshow_matr[i][j]*(2*j)) / total_count
+                elif i == j:
+                    neutral_occur += (imshow_matr[i][j]*(i+j)) / total_count
+                elif j > i:
+                    negative_occur += (imshow_matr[i][j]*(j-i)) / total_count
+                    neutral_occur += (imshow_matr[i][j]*(2*i)) / total_count
         neutral_clusters.append(neutral_occur)
         positive_clusters.append(positive_occur)
         negative_clusters.append(negative_occur)
