@@ -708,7 +708,7 @@ def get_coords_PDB_msd(
             if "PL" in j:
                 polymer_msd += 1
 
-
+    print("starting to get msd from the pdb file", folder)
     if polymer_msd:
         poly_counter = []
         if not repeat_units:
@@ -1436,7 +1436,7 @@ def plot_calc_diffu(
         all_mol=all_mol,
         cell=cell,
         D_cat=D_cat_list[0],
-        D_ani=D_ani_list[0],
+        D_ani=D_ani_list[0]/anion_solv_atoms,
         temperature=temperature,
     )
 
