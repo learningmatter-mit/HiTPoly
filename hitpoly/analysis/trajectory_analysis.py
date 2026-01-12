@@ -708,7 +708,7 @@ def get_coords_PDB_msd(
             if "PL" in j:
                 polymer_msd += 1
 
-    print("starting to get msd from the pdb file", folder)
+
     if polymer_msd:
         poly_counter = []
         if not repeat_units:
