@@ -248,6 +248,7 @@ def run(
             prod_run_time=simu_length,
             ani_name_rdf=ani_name_rdf,
             poly_name=','.join(poly_name),
+            hitpoly_path=hitpoly_path,
         )
 
     elif simu_type.lower() == "tg":

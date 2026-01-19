@@ -1369,7 +1369,7 @@ def plot_calc_diffu(
                 solv_name[i],
                 D_solv,
                 "with this many:",
-                len(solv_idxs_list[i]),
+                len(solv_idxs_list[i])/anion_solv_atoms,
             )
             f.write(
                 f"diffusivity of {solv_name[i]} is {D_solv}, with this many ions: {len(solv_idxs_list[i]), 'with linearity:', {m_solv_loglog[i]}}\n"
@@ -1436,7 +1436,7 @@ def plot_calc_diffu(
         all_mol=all_mol,
         cell=cell,
         D_cat=D_cat_list[0],
-        D_ani=D_ani_list[0]/anion_solv_atoms,
+        D_ani=D_ani_list[0],
         temperature=temperature,
     )
 
@@ -1559,7 +1559,7 @@ def plot_clusters_cond(
 
         doubSum, alphasum, numerator = 0, 0, 0
         volume = np.prod((cell.diagonal() * 1e-10))
-        for ncat, cur_cat in enumerate(imshow_matr[::-1]):
+        for ncat, cur_cat in enumerate(imshow_matr):
             for nani, cur_pop in enumerate(cur_cat):
                 D_ij = 0
                 z_ij = ncat - nani

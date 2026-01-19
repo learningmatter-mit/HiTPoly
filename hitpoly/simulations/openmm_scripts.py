@@ -1303,6 +1303,7 @@ def write_analysis_script(
     platform,
     simu_temperature,
     prod_run_time,
+    hitpoly_path,
     xyz_output=25,  # ps
     ani_name_rdf="None",
     poly_name="None",
@@ -1322,7 +1323,7 @@ def write_analysis_script(
             f.write("source /home/gridsan/$USER/.bashrc" + "\n")
             f.write("source activate htvs" + "\n")
             f.write("\n")
-            f.write("export HiTPoly=$HOME/HiTPoly" + "\n")
+            f.write(f"export HiTPoly={hitpoly_path}" + "\n")
             f.write(f"export DATA_PATH={results_path}" + "\n")
             f.write(f"export NAME=T{simu_temperature}" + "\n")
             f.write(
@@ -1341,7 +1342,7 @@ def write_analysis_script(
             f.write("source /home/$USER/.bashrc" + "\n")
             f.write("source activate htvs" + "\n")
             f.write("\n")
-            f.write("export HiTPoly=$HOME/HiTPoly" + "\n")
+            f.write(f"export HiTPoly={hitpoly_path}" + "\n")
             f.write(f"export DATA_PATH={results_path}" + "\n")
             f.write(f"export NAME=T{simu_temperature}" + "\n")
             f.write(
