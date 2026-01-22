@@ -1369,7 +1369,7 @@ def plot_calc_diffu(
                 solv_name[i],
                 D_solv,
                 "with this many:",
-                len(solv_idxs_list[i])/anion_solv_atoms,
+                len(solv_idxs_list[i]),
             )
             f.write(
                 f"diffusivity of {solv_name[i]} is {D_solv}, with this many ions: {len(solv_idxs_list[i]), 'with linearity:', {m_solv_loglog[i]}}\n"

@@ -1321,7 +1321,7 @@ def write_analysis_script(
             f.write("# Load modules" + "\n")
             f.write("source /etc/profile" + "\n")
             f.write("source /home/gridsan/$USER/.bashrc" + "\n")
-            f.write("source activate htvs" + "\n")
+            f.write(f"source activate {htvs_env}" + "\n")
             f.write("\n")
             f.write(f"export HiTPoly={hitpoly_path}" + "\n")
             f.write(f"export DATA_PATH={results_path}" + "\n")

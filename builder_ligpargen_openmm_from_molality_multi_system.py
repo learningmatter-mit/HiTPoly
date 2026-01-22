@@ -37,6 +37,7 @@ def run(
     platform:str='local',
     polymer_chain_length:int=None,
     simu_type="conductivity",
+    htvs_env='htvs',
 ):
     """Run the MD simulation."""
     cuda_device = "0"
@@ -249,6 +250,7 @@ def run(
             ani_name_rdf=ani_name_rdf,
             poly_name=','.join(poly_name),
             hitpoly_path=hitpoly_path,
+            htvs_env=htvs_env,
         )
 
     elif simu_type.lower() == "tg":
@@ -336,6 +338,11 @@ if __name__ == "__main__":
         help="What type of simulation to perform, options [conductivity, tg]}",
         default="conductivity",
     )
+    parser.add_argument(
+        "--htvs_env",
+        help="HTVS environment",
+        default="htvs",
+    )
     args = parser.parse_args()
 
     if args.hitpoly_path == "None":
@@ -390,4 +397,5 @@ if __name__ == "__main__":
         ratios_type=ratios_type,
         hitpoly_path=args.hitpoly_path,
         simu_type=args.simu_type,
+        htvs_env=args.htvs_env,
     )
