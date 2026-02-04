@@ -394,6 +394,7 @@ def get_molecule_population_matrix(
     atom_names,
     atom_names_list,
     cutoff=3.25,
+    anion_solv_atoms=1,
 ):
     """
     Function to get the population matrix of clusters across the whole
@@ -403,6 +404,7 @@ def get_molecule_population_matrix(
         cell - 3x3 matrix of the cell size (PBC)
         atom_names - long atom names loaded from the read_xyz function
         cutoff - cutoff for measuring clustering (3.25 from France-Lanord and Molinari papers)
+        anion_solv_atoms - number of anion atoms per anion molecule
     Return:
         all_mol - repeating numpy array where every three arrays is the next timestep
             clustering information, 1st line is the cation amount in cluster, 2nd line
@@ -426,6 +428,7 @@ def get_molecule_population_matrix(
     an1 = [cur.split("-")[1] == salt_types[1] for cur in np.array(atom_names)[atom_inxs]]
     # an1 = [cur.split("-")[1] == "PL1" for cur in np.array(atom_names)[atom_inxs]]
     an1 = np.nonzero(an1)[0]
+    an1_dict = {i:i//anion_solv_atoms for i in set(an1.reshape(-1))}
     orig_an1 = [
         cur.split("-")[1] == salt_types[1] and cur.split("-")[0] == salt_atoms[1]
         # cur.split("-")[1] == "PL1" and cur.split("-")[0] == "N"
@@ -455,7 +458,9 @@ def get_molecule_population_matrix(
 
         for molecule in molecules:
             num_cat = len(set(molecule).intersection(set(cations)))
-            num_an1 = len(set(molecule).intersection(set(an1.reshape(-1))))
+            ani_set = set(molecule).intersection(set(an1.reshape(-1)))
+            mapped_ani_values = [an1_dict[val] for val in ani_set]
+            num_an1 = len(set(mapped_ani_values))
             popmatrix[num_cat, num_an1] += 1
         all_mol.append(
             np.vstack(
@@ -1013,6 +1018,7 @@ def plot_calc_diffu(
     solv_name=[],
     poly_name: list = [],
     atom_names_list: list = [],
+    anion_solv_atoms = 1, #ratio of cation to anion atoms in atom_names_list
 ):
     """
     save_freq - ps
@@ -1055,7 +1061,7 @@ def plot_calc_diffu(
     cat_color = ["darkorange", "saddlebrown", "darkred"]
     ani_color = ["blue", "navy", "darkviolet"]
     solv_color = ["dimgrey", "darkgrey", "silver"]
-    poly_color = ["forestgreen", "green", "darkolivegreen"]
+    poly_color = ["forestgreen", "lime", "yellowgreen", "palegreen", "mediumaquamarine"]
     #####################################
     # Cation
     # zero origin
@@ -1356,7 +1362,7 @@ def plot_calc_diffu(
             f.write(
                 f"diffusivity of {ani_name[i]} is {D_ani}, with this many ions: {len(ani_idxs_list[i]), 'with linearity:', {m_ani_loglog[i]}}\n"
             )
-            conductivity += D_ani * len(ani_idxs_list[i])
+            conductivity += D_ani * len(ani_idxs_list[i])/anion_solv_atoms
         for i, D_solv in enumerate(D_solv_list):
             print(
                 "diffusivity of",
@@ -1422,6 +1428,7 @@ def plot_calc_diffu(
         atom_names=atom_names,
         atom_names_list=atom_names_list,
         cutoff=3.25,
+        anion_solv_atoms=anion_solv_atoms,
     )
 
     plot_clusters_cond(
@@ -1519,7 +1526,11 @@ def plot_clusters_cond(
         plt.close()
 
         # this part writes the amount of clusters with neutral, positive or negative charge
-        numbers_clusters = np.sum(imshow_matr)
+        imshow_matr = imshow_matr[::-1, :]
+        total_count = 0
+        for i in range(imshow_matr.shape[0]):
+            for j in range(imshow_matr.shape[1]):
+                total_count += imshow_matr[i,j]*(i+j)
 
         freelithium_occur = 0
         neutral_occur = 0
@@ -1527,18 +1538,19 @@ def plot_clusters_cond(
         negative_occur = 0
         freetfsi_occur = 0
         for i in range(imshow_matr.shape[0]):
-            t = imshow_matr.shape[0] - 1 - i
             for j in range(imshow_matr.shape[1]):
-                if j == 0 and t > j:
-                    freelithium_occur += imshow_matr[i][j] / numbers_clusters
-                elif t == 0 and j > t:
-                    freetfsi_occur += imshow_matr[i][j] / numbers_clusters
-                elif t > j:
-                    positive_occur += imshow_matr[i][j] / numbers_clusters
-                elif t == j:
-                    neutral_occur += imshow_matr[i][j] / numbers_clusters
-                elif j > t:
-                    negative_occur += imshow_matr[i][j] / numbers_clusters
+                if j == 0 and i > j:
+                    freelithium_occur += imshow_matr[i][j]*i / total_count
+                elif i == 0 and j > i:
+                    freetfsi_occur += imshow_matr[i][j]*j / total_count
+                elif i > j:
+                    positive_occur += (imshow_matr[i][j]*(i-j)) / total_count
+                    neutral_occur += (imshow_matr[i][j]*(2*j)) / total_count
+                elif i == j:
+                    neutral_occur += (imshow_matr[i][j]*(i+j)) / total_count
+                elif j > i:
+                    negative_occur += (imshow_matr[i][j]*(j-i)) / total_count
+                    neutral_occur += (imshow_matr[i][j]*(2*i)) / total_count
         neutral_clusters.append(neutral_occur)
         positive_clusters.append(positive_occur)
         negative_clusters.append(negative_occur)
@@ -1547,7 +1559,7 @@ def plot_clusters_cond(
 
         doubSum, alphasum, numerator = 0, 0, 0
         volume = np.prod((cell.diagonal() * 1e-10))
-        for ncat, cur_cat in enumerate(imshow_matr[::-1]):
+        for ncat, cur_cat in enumerate(imshow_matr):
             for nani, cur_pop in enumerate(cur_cat):
                 D_ij = 0
                 z_ij = ncat - nani
@@ -1596,7 +1608,11 @@ def plot_calc_rdf(
     plot_names: list = None,
 ):
     coord_numbers = []
-    save_names = []
+
+    duration = names[0].split("_")[-1]
+    with open(f"{folder}/coord_vals_{duration}.txt", "w") as f:
+        f.write("names,coordination_number\n")
+
     for i, two_name in enumerate(two_names):
         figsize = (6, 5)
         fig_scalingfactor = figsize[1] / 5
@@ -1660,10 +1676,9 @@ def plot_calc_rdf(
         center_val = centers[min_idx]
         coord_val = coord[min_idx]
         coord_numbers.append(coord_val)
-        if names:
-            save_names.append(names[i])
-        else:
-            save_names.append("_".join(two_name))
+
+        with open(f"{folder}/coord_vals_{duration}.txt", "a") as f:
+            f.write(f"{names[i]},{coord_val}\n")
 
         axs.plot(centers, gr, linewidth=3, label=r"$g(r)$", color="blue")
 
@@ -1735,12 +1750,6 @@ def plot_calc_rdf(
             plt.savefig(f"{folder}/RDF_{i}.png", dpi=dpi)
         plt.show()
 
-    if folder:
-        duration = names[0].split("_")[-1]
-        with open(f"{folder}/coord_vals_{duration}.txt", "w") as f:
-            f.write("names,coordination_number\n")
-            for name, coord in zip(names, coord_numbers):
-                f.write(f"{name},{coord},\n")
 
 
 def plot_calc_corr(
@@ -2166,6 +2175,7 @@ def compute_fft_onsager(complete_disp_matrix):
     displacements_final_diffusion_ions = complete_disp_matrix.transpose(1, 0, 2)
     dt_indices = np.arange(0, n_dt)
     msd_matrix = []
+
     for i in tqdm(range(n_ions)):
         msd_by_pairs = np.empty([0, n_dt])  # Shape of n_pairs * n_dt
         # print(f"working on column {i}th")

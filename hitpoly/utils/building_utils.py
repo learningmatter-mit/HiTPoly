@@ -27,10 +27,16 @@ def calculate_box_numbers(
         get_atom_count(long_smiles, salt_smiles, polymer_count, concentration),
     )
 
-    print(
-        "Repeat unit molecular mass",
-        get_mol_mass(smiles.replace("[Cu]", "").replace("[Au]", "")),
-    )
+    try:
+        print(
+            "Repeat unit molecular mass",
+            get_mol_mass(smiles.replace("[Cu]", "").replace("[Au]", "")),
+        )
+    except:
+        print(
+            "Repeat unit molecular mass",
+            get_mol_mass(smiles.replace("[Cu]", "C").replace("[Au]", "C")),
+        )
 
   # molality
     print(
@@ -116,7 +122,7 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
         salt_smiles.append("F[P-](F)(F)(F)(F)F")
         salt_paths.append(f"{salt_path}/geometry_file_PF6.pdb")
         salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_PF6_q100.data")
-        ani_name_rdf = "P,F"
+        ani_name_rdf = "F"
     elif anion == "FSI":
         salt_smiles.append("[N-](S(=O)(=O)F)S(=O)(=O)F")
         salt_paths.append(f"{salt_path}/geometry_file_FSI.pdb")
@@ -127,13 +133,23 @@ def salt_string_to_values(hitpoly_path, salt_string, concentration):
         salt_paths.append(f"{salt_path}/geometry_file_TETRAORION.pdb")
         salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_TETRAORION_q100.data")
         ani_name_rdf = "O,N"
+    elif anion == "BF4":
+        salt_smiles.append("F[B-](F)(F)F")
+        salt_paths.append(f"{salt_path}/geometry_file_BF4.pdb")
+        salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_BF4_q100.data")
+        ani_name_rdf = "F"
+    elif anion == "NO3":
+        salt_smiles.append("O=[N+]([O-])[O-]")
+        salt_paths.append(f"{salt_path}/geometry_file_NO3.pdb")
+        salt_data_paths.append(f"{hitpoly_path}/data/forcefield_files/lammps_NO3_q100.data")
+        ani_name_rdf = "O"
     else:
         raise ValueError(f"Anion {anion} not supported")
 
     return salt_smiles, salt_paths, salt_data_paths, ani_name_rdf, concentration
 
 
-def calculate_composition_by_atoms(
+def calculate_composition_by_mol_fractions(
     molecular_weights: 'List[float]',
     atoms_per_molecule: 'List[int]',
     mole_fractions: 'List[float]',
@@ -190,6 +206,79 @@ def calculate_composition_by_atoms(
     
     return np.array(number_of_molecules), mol_prcnt, weight_prcnt
 
+def calculate_composition_by_weight_fractions(
+    molecular_weights: 'List[float]',
+    atoms_per_molecule: 'List[int]',
+    weight_fractions: 'List[float]',
+    total_atoms: int
+) -> 'Tuple[List[int], List[float], List[float]]':
+    """
+    Calculates the number of molecules for each component based on weight fractions and a target total atom count.
+    Optimized for systems with large size disparities between molecules.
+
+    Args:
+        molecular_weights (list[float]): List of molecular weights (g/mol) for each component.
+        atoms_per_molecule (list[int]): List of atoms per molecule/monomer for each component.
+        weight_fractions (list[float]): List of desired weight fractions for each component (should sum to 1.0).
+        total_atoms (int): The target total number of atoms in the simulation box.
+
+    Returns:
+        tuple[list[int], list[float], list[float]]: A tuple containing three lists:
+            - number_of_molecules (list[int]): The calculated integer number of molecules for each component.
+            - mol_percent (list[float]): The resulting mole percent for each component (from realized counts).
+            - weight_percent (list[float]): The resulting weight percent for each component (from realized counts).
+    """
+
+    # Normalize weight fractions if they don't sum to 1 due to numerical noise
+    total_w = float(sum(weight_fractions))
+    if total_w <= 0:
+        n = len(molecular_weights)
+        return np.array([0] * n), [0.0] * n, [0.0] * n
+    w_norm = [w / total_w for w in weight_fractions]
+
+    # Convert weight fractions to mole-fraction proxies via w_i / M_i
+    mole_proportions = [w / mw if mw > 0 else 0.0 for w, mw in zip(w_norm, molecular_weights)]
+    total_mole_prop = sum(mole_proportions)
+    if total_mole_prop == 0:
+        n = len(molecular_weights)
+        return np.array([0] * n), [0.0] * n, [w * 100 for w in w_norm]
+    mole_fractions = [mp / total_mole_prop for mp in mole_proportions]
+
+    # Compute average atoms per molecule with the derived mole fractions
+    avg_apm = sum([mf * apm for mf, apm in zip(mole_fractions, atoms_per_molecule)])
+    if avg_apm == 0:
+        n = len(molecular_weights)
+        return np.array([0] * n), [0.0] * n, [w * 100 for w in w_norm]
+
+    # Ideal unrounded molecule counts to target the total atom budget
+    total_molecules_ideal = total_atoms / avg_apm
+    unrounded_counts = [mf * total_molecules_ideal for mf in mole_fractions]
+
+    # Choose the least abundant non-zero component as a stable reference
+    non_zero_counts = [(count, i) for i, count in enumerate(unrounded_counts) if count > 0]
+    if not non_zero_counts:
+        n = len(molecular_weights)
+        return np.array([0] * n), [0.0] * n, [w * 100 for w in w_norm]
+    key_count, key_idx = min(non_zero_counts)
+
+    # Set the integer count for the key component (at least 1)
+    num_key_component = round(key_count) or 1
+
+    # Preserve the (derived) mole-fraction ratios for the rest
+    key_mf = mole_fractions[key_idx]
+    number_of_molecules = [round(num_key_component * (mf / key_mf)) for mf in mole_fractions]
+
+    # Calculate realized mol% from counts
+    total_molecules_real = sum(number_of_molecules)
+    mol_prcnt = [(n_i / total_molecules_real) * 100 if total_molecules_real > 0 else 0.0 for n_i in number_of_molecules]
+
+    # Calculate realized wt% from counts
+    masses = [n_i * mw for n_i, mw in zip(number_of_molecules, molecular_weights)]
+    total_mass = sum(masses)
+    weight_prcnt = [(m / total_mass) * 100 if total_mass > 0 else 0.0 for m in masses]
+
+    return np.array(number_of_molecules), mol_prcnt, weight_prcnt
+
 def get_concentraiton_from_molality_multi_system(
     smiles:list,
     molality:float,
@@ -197,7 +286,8 @@ def get_concentraiton_from_molality_multi_system(
     system:str="liquid",
     atom_count:int=None,# 15k for liquids, 25k for polymers
     polymer_chain_length:int=None,
-    mol_ratios:list=None,
+    ratios:list=None,
+    ratios_type:str="mol",
     salt_smiles:str="O=S(=O)(NS(=O)(=O)C(F)(F)F)C(F)(F)F.[Li]" # LiTFSI,
 ):
     if not atom_count:
@@ -210,24 +300,24 @@ def get_concentraiton_from_molality_multi_system(
             for smile in smiles:
                 if "[Cu]" not in smile and "[Au]" not in smile:
                     raise ValueError("Polymer must contain [Cu] and [Au]")
-            atom_count = 22000
+            atom_count = 23000
         elif system == "gel":
-            if not mol_ratios:
-                raise ValueError("Mole fraction (mol_ratios) ratio must be provided for gel")
-            if np.array(mol_ratios).sum() != 1:
-                raise ValueError("Mole fraction (mol_ratios) ratio must sum to 1")
-            if len(mol_ratios) != len(smiles):
-                raise ValueError("Mole fraction (mol_ratios) ratio must have the same length as smiles")
-            atom_count = 19000
+            if not ratios:
+                raise ValueError("Ratios must be provided for gel")
+            if round(np.array(ratios).sum(), 3) != 1:
+                raise ValueError("Ratios must sum to 1")
+            if len(ratios) != len(smiles):
+                raise ValueError("Ratios must have the same length as smiles")
+            atom_count = 23000
         else:
             raise ValueError("System must be either liquid, polymer or gel")
     
     if system == "liquid" or system == "polymer":
-        if mol_ratios or len(smiles)>1:
-            if np.array(mol_ratios).sum() != 1:
-                raise ValueError("Mole fraction (mol_ratios) ratio must sum to 1")
-            if len(mol_ratios) != len(smiles):
-                raise ValueError("Mole fraction (mol_ratios) ratio must have the same length as smiles")
+        if ratios or len(smiles)>1:
+            if round(np.array(ratios).sum(), 3) != 1:
+                raise ValueError("Ratios must sum to 1")
+            if len(ratios) != len(smiles):
+                raise ValueError("Ratios must have the same length as smiles")
 
     poly_name = []
     atom_count_solvent = []
@@ -235,8 +325,14 @@ def get_concentraiton_from_molality_multi_system(
     repeat_units = []
     for ind, smile in enumerate(smiles):
         if "[Cu]" in smile and "[Au]" in smile:
-            temp_smile = smile.replace("[Cu]", "").replace("[Au]", "")
-            atom_count_monomer = get_atom_count(temp_smile)
+            try:
+                temp_smile = smile.replace("[Cu]", "").replace("[Au]", "")
+                atom_count_monomer = get_atom_count(temp_smile)
+            except:
+                temp_smile = smile.replace("[Cu]", "C").replace("[Au]", "C")
+                atom_count_monomer = get_atom_count(temp_smile)
+                print("Replacing end groups with carbons to avoid syntax errors for", temp_smile)
+            
             if not polymer_chain_length:
                 polymer_chain_length = 1100
             repeat_units.append(round(
@@ -259,7 +355,12 @@ def get_concentraiton_from_molality_multi_system(
     atom_count_solvent = np.array(atom_count_solvent)
 
     if len(smiles)>1:
-        number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_atoms(mol_mass, atom_count_solvent, mol_ratios, atom_count)
+        if "mol" in ratios_type:
+            number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_mol_fractions(mol_mass, atom_count_solvent, ratios, atom_count)
+        elif "weight" in ratios_type:
+            number_of_molecules, mol_prcnt, weight_prcnt = calculate_composition_by_weight_fractions(mol_mass, atom_count_solvent, ratios, atom_count)
+        else:
+            raise ValueError("Ratios type must be either mol or weight")
         concentration = (molality * mol_mass.dot(number_of_molecules) / 1000).astype(int)
         total_atoms = get_atom_count(salt_smiles)*concentration+number_of_molecules.dot(atom_count_solvent)
     else:

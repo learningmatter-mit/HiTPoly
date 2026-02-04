@@ -89,7 +89,26 @@ def run(
     )
 
     xyz_msd_unwrp = unwrap_all(xyz_msd, cell)
-    cat_ani_index = [ind for ind, j in enumerate(atom_names_long_msd) if "PL1" not in j]
+
+    ### TODO: Needs to be updated if anion has charge different from -1
+    ### TODO: Add support for multiple anions
+    # The reason for ion_ratio is that for ions like BF4 and PF6 where the F is the solvating ion
+    # the diffusivity is calculated from the same atoms and as such we need to correct for the overcounting.
+    num_an = sum("AN" in name for name in atom_names_long_msd)
+    num_ca = sum("CA" in name for name in atom_names_long_msd)
+    if num_an != num_ca:
+        if cat_name == "Zn":
+            anion_solv_atoms = int(num_an/num_ca)/2
+        else:
+            anion_solv_atoms = int(num_an/num_ca)
+        an_indices = [i for i, name in enumerate(atom_names_long_msd) if "AN" in name]
+        filtered_an_indices = [idx for j, idx in enumerate(an_indices) if j % anion_solv_atoms != 0]
+        atom_names_long_msd_filtered = [name for i, name in enumerate(atom_names_long_msd) if i not in filtered_an_indices]
+    else:
+        atom_names_long_msd_filtered = atom_names_long_msd
+        anion_solv_atoms = 1
+
+    cat_ani_index = [ind for ind, j in enumerate(atom_names_long_msd_filtered) if "PL" not in j]
     xyz_msd_corr = xyz_msd_unwrp[:, cat_ani_index].copy()
 
     for i in poly_names:
@@ -111,9 +130,11 @@ def run(
         name=name,
         poly_name=[i[0] + "-" + i[1] for i in poly_names],
         atom_names_list=atom_name_list,
+        anion_solv_atoms=anion_solv_atoms,
     )
 
-    atom_names_long_msd = [i for i in atom_names_long_msd if "PL" not in i]
+    atom_names_long_msd = [i for i in atom_names_long_msd_filtered if "PL" not in i]
+
     plot_calc_corr(
         xyz=xyz_msd_corr,
         folder=folder,
@@ -128,7 +149,7 @@ def run(
 
     ### TODO: RDF analysis currently works only for one cation and one anion
     one_name = [f"{cat_name[0]}-CA1"]
-    coord_atoms = ["O", "S", "N", "Br", "P", "Si"]
+    coord_atoms = ["O", "S", "N", "F"]
     names_temp = ["solv_all","solv_poly", "O_poly", "others_poly"]
     two_names = []
     names = []
@@ -178,16 +199,15 @@ def run(
         res_id=residue_ids,
         box_dim=cell[0][0],
     )
-
     data_coordination = {
         i: {
             j: {"nlist": nlist, "dist": dist, "numer_coord_O": len(nlist)}
             for j, (nlist, dist) in enumerate(
                 (
                     get_coord_environment_convex(
-                        li_idx, structurelist[i], return_dist=True, ani_name_rdf=ani_name_rdf
+                        li_idx, structurelist[i], return_dist=True, ani_name_rdf=ani_name_rdf+coord_atoms
                     )
-                    for li_idx in structurelist[i].indices_from_symbol("Li")
+                    for li_idx in structurelist[i].indices_from_symbol(one_name[0].split('-')[0])
                 )
             )
         }

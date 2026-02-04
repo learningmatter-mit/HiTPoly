@@ -49,9 +49,9 @@ def get_structure_list(atom_names_rdf, xyz_rdf, box_dim, res_id, cubic_box=True)
 
 def get_coord_environment_convex(Li_index, s, return_dist=False, ani_name_rdf=None):
     """ANION
-    Li_index : index of Li in the pymatgen structure object
+    Li_index : index of cation in the pymatgen structure object
     structure : pymatgen structure object
-    returns a list of pmg Neighbor objects in the order of distance from target lithium
+    returns a list of pmg Neighbor objects in the order of distance from target cation
     """
     site = s[Li_index]
     nlist = s.get_neighbors(site, 6)
@@ -72,9 +72,8 @@ def get_coord_environment_convex(Li_index, s, return_dist=False, ani_name_rdf=No
         else:
             nlist_new.append(n)
 
-    # find all the anions that coordinate to Li
+    # find all the anions that coordinate to cation
     nlist_O = [i for i in nlist_new if i.specie in anion_elements]
-
     nearest_non_H_O = nlist_non_H_O[0]
     convex_nlist_O = nlist_O[:4]
     for neighb_index, neighb in enumerate(
@@ -99,6 +98,7 @@ def get_coord_environment_convex(Li_index, s, return_dist=False, ani_name_rdf=No
             convex_nlist_O.append(neighb)
         else:
             break
+
     if return_dist:
         max_dist = convex_nlist_O[-1].distance(site)
         return convex_nlist_O, max_dist
@@ -180,7 +180,7 @@ def make_barplot_coordination_atomtypes(
     # Counting the how many unique anions and polymers are in each coord shell
     # and the mean distances to the polymers and to the anions
     unique_solv = {}
-    for i in range(1,20):
+    for i in range(1,40):
         unique_solv[i] = []
         
     for item1 in data.values():
@@ -262,6 +262,7 @@ chain prevalence,unique anions,mean anion distance,anion prevalence\n')
     neighbors_relevant = {}
     num_neighs_relevant = []
     relevant_ids = []
+
     for i in range(len(freq_percent)):
         if freq_percent[i] > 1:
             freq_relevant.append(freq_percent[i])
