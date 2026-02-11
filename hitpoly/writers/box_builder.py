@@ -283,33 +283,37 @@ def perlmutter_ligpargen(ligpargen_path, mol_filename, output_prefix):
         else:
             time.sleep(10)
 
-def supercloud_ligpargen(ligpargen_path, resid_name):
-    with open(f"{ligpargen_path}/run.sh", "w") as f:
-        f.write("#!/bin/bash" + "\n")
-        f.write("#SBATCH --job-name=ligpargen" + "\n")
-        f.write("#SBATCH --partition=xeon-p8" + "\n")
-        f.write("#SBATCH --nodes=1" + "\n")
-        f.write("#SBATCH --ntasks-per-node=1" + "\n")
-        f.write("#SBATCH --cpus-per-task=1" + "\n")
-        f.write("#SBATCH --time=2:00:00" + "\n")
-        f.write("\n")
-        f.write("cwd=$(pwd)" + "\n")
-        f.write(f"cd {ligpargen_path}" + "\n")
-        f.write(f"export XDG_DATA_HOME=/state/partition1/user/$(id -un)" + "\n")
-        f.write(f"podman load -i $HOME/containers/ligpargen.tar" + "\n")
-        f.write(f"podman run --rm -w /app/RUN -v .:/app/RUN:Z -v .:/app/RUN:Z ligpargen:latest python ../LigParGen/Converter.py -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l" + "\n")
-        f.write("cd $cwd" + "\n")
-    command = f"sbatch {ligpargen_path}/run.sh"
-    subprocess.run(command, shell=True)
-    t0 = time.time()
-    while True:
-        if os.path.exists("PLY.xml"):
-            time.sleep(2)
-            break
-        elif time.time() - t0 > 300:
-            break
-        else:
-            time.sleep(10)
+def supercloud_ligpargen(ligpargen_path, resid_name, ligpargen_version="2.0"):
+    if ligpargen_version == "2.0":
+        with open(f"{ligpargen_path}/run.sh", "w") as f:
+            f.write("#!/bin/bash" + "\n")
+            f.write("#SBATCH --job-name=ligpargen" + "\n")
+            f.write("#SBATCH --partition=xeon-p8" + "\n")
+            f.write("#SBATCH --nodes=1" + "\n")
+            f.write("#SBATCH --ntasks-per-node=1" + "\n")
+            f.write("#SBATCH --cpus-per-task=1" + "\n")
+            f.write("#SBATCH --time=2:00:00" + "\n")
+            f.write("\n")
+            f.write("cwd=$(pwd)" + "\n")
+            f.write(f"cd {ligpargen_path}" + "\n")
+            f.write(f"export XDG_DATA_HOME=/state/partition1/user/$(id -un)" + "\n")
+            f.write(f"podman load -i $HOME/containers/ligpargen.tar" + "\n")
+            f.write(f"podman run --rm -w /app/RUN -v .:/app/RUN:Z -v .:/app/RUN:Z ligpargen:latest python ../LigParGen/Converter.py -m poly.mol -o 0 -c 0 -r {resid_name} -d . -l" + "\n")
+            f.write("cd $cwd" + "\n")
+        command = f"sbatch {ligpargen_path}/run.sh"
+        subprocess.run(command, shell=True)
+        t0 = time.time()
+        while True:
+            if os.path.exists("PLY.xml"):
+                time.sleep(2)
+                break
+            elif time.time() - t0 > 120:
+                break
+            else:
+                time.sleep(10)
+    elif ligpargen_version == "2.1":
+        raise NotImplementedError("LigParGen 2.1 is not implemented yet.")
+
 
 
 def create_ligpargen_smiles(
@@ -880,6 +884,7 @@ def assign_lpg_params(
     train_dataset,
     param_dict,
     lit_charges_save_path,
+    polynames,
     charges,
 ):
     for ind_dataset in range(len(param_dict)):
@@ -910,7 +915,7 @@ def assign_lpg_params(
                 charges_dict[key] = np.array(val).mean()
         elif charges == "LIT":
             charges_list = []
-            with open(f"{lit_charges_save_path}/LIT_charges/PEO.csv", "r") as f:
+            with open(f"{lit_charges_save_path}/LIT_charges/{polynames[ind_dataset]}.csv", "r") as f:
                 lines = f.readlines()
                 try:
                     for i, a in zip(lines, atoms_short[ind_dataset]):
@@ -918,9 +923,12 @@ def assign_lpg_params(
                             charges_list.append(float(i.split(",")[0]))
                 except:
                     # If the charges file starts with a description
+                    print(lines[1:])
+                    print(atoms_short[ind_dataset])
                     for i, a in zip(lines[1:], atoms_short[ind_dataset]):
                         if i.split(",")[1] == a:
                             charges_list.append(float(i.split(",")[0]))
+            print(len(charges_list), len(atoms_short[ind_dataset]))
             assert len(charges_list) == len(atoms_short[ind_dataset])
 
             df = pd.DataFrame({"charge": charges_list, "names": atom_names_short[ind_dataset]})
@@ -1313,10 +1321,10 @@ def creating_ff_and_resid_files(mol_dict, atom_types_list):
     for key in mol_dict.keys():
         minuses = key.count("-")
         pluses = key.count("+")
-        if pluses - minuses == -1:
+        if pluses - minuses <= -1:
             name_iterables.append(f"AN{ani_ind}")
             ani_ind += 1
-        elif pluses - minuses == 1:
+        elif pluses - minuses >= 1:
             name_iterables.append(f"CA{cat_ind}")
             cat_ind += 1
         else:
@@ -1933,6 +1941,7 @@ def create_box_and_ff_files_openmm(
     atom_names_long,
     param_dict,
     lit_charges_save_path,
+    polynames,
     charges,
     charge_scale,
     salt_smiles,
@@ -1979,6 +1988,7 @@ def create_box_and_ff_files_openmm(
         train_dataset=train_dataset,
         param_dict=param_dict,
         lit_charges_save_path=lit_charges_save_path,
+        polynames=polynames,
         charges=charges,
     )
 

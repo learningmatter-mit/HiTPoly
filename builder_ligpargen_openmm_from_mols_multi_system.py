@@ -1,7 +1,5 @@
 import argparse
 import os
-import ast
-import numpy as np
 from hitpoly.writers.box_builder import *
 from hitpoly.utils.building_utils import salt_string_to_values, get_concentraiton_from_molality_multi_system
 from hitpoly.simulations.openmm_scripts import (
@@ -24,23 +22,20 @@ def run(
     smiles:list,
     charge_scale:float,
     salt_type:str,
-    molality:float,
+    alkali_count:int,
     charges:str,
     polynames:list,
     lit_charges_save_path:str,
     system:str,
     simu_temp:float,
     atom_count:int,
-    ratios:list,
-    ratios_type:str,
+    mol_ratios:list,
     simu_length:int,
     md_save_time:int,
     hitpoly_path:str,
-    timestep:float=0.002,
     platform:str='local',
     polymer_chain_length:int=None,
     simu_type="conductivity",
-    htvs_env='htvs',
 ):
     """Run the MD simulation."""
     cuda_device = "0"
@@ -51,7 +46,7 @@ def run(
 
     if salt_type:
         salt_smiles, salt_paths, salt_data_paths, ani_name_rdf, concentration = salt_string_to_values(
-            hitpoly_path, salt_type, 0)
+            hitpoly_path, salt_type, alkali_count)
         salt = True
     else:
         salt = False
@@ -68,16 +63,21 @@ def run(
     atoms_long_list = []
     param_dict_list = []
 
-    concentration, solvent_count, repeats, weight_prcnt, total_atoms, poly_name = get_concentraiton_from_molality_multi_system(
-        smiles=smiles,
-        molality=molality,
-        system=system,
-        atom_count=atom_count,
-        polymer_chain_length=polymer_chain_length,
-        ratios=ratios,
-        ratios_type=ratios_type,
-        salt_smiles='.'.join(salt_smiles),
-    )
+    """
+    specifying the specific parameters for this simulation.
+    """
+    solvent_count = mol_ratios
+    poly_name = "PLY"
+    repeats = [1] * len(smiles)
+
+    print(f"Concentration: {concentration}, solvent_count: {solvent_count}, repeats: {repeats}, poly_name: {poly_name}")
+    print("--------------------------------")
+    print("smiles: ", smiles)
+    print(f"System: {system}")
+    print(f"Atom count: {atom_count}")
+    print(f"Polymer chain length: {polymer_chain_length}")
+    print(f"Mol ratios: {mol_ratios}")
+    print(f"Salt smiles: {salt_smiles}")
 
     with open(f"{save_path}/repeats.txt", "w") as f:
         f.write(str(repeats))
@@ -151,7 +151,6 @@ def run(
             long_smiles,
             name=name,
         )
-        # minimize = False
         
         print(f"Saved conformer pdb.")
 
@@ -159,11 +158,11 @@ def run(
             minimize_polymer(
                 save_path=save_path,
                 long_smiles=long_smiles,
-                atoms_long=[atoms_long],
-                atoms_short=[atoms],
-                atom_names_short=[atom_names],
-                atom_names_long=[atom_names_long],
-                param_dict=[param_dict],
+                atoms_long=atoms_long,
+                atoms_short=atoms,
+                atom_names_short=atom_names,
+                atom_names_long=atom_names_long,
+                param_dict=param_dict,
                 lit_charges_save_path=None,
                 charges=charges,
                 name=name,
@@ -207,6 +206,7 @@ def run(
         os.makedirs(final_save_path)
 
     if system == "polymer" or system == "gel":
+
         equilibrate_system_1(
             save_path=save_path,
             final_save_path=final_save_path,
@@ -240,7 +240,6 @@ def run(
             mdOutputTime=md_save_time,
             simu_time=simu_length,
             cuda_device=cuda_device,
-            timestep=timestep,
         )
 
         write_analysis_script(
@@ -254,9 +253,6 @@ def run(
             prod_run_time=simu_length,
             ani_name_rdf=ani_name_rdf,
             poly_name=','.join(poly_name),
-            hitpoly_path=hitpoly_path,
-            htvs_env=htvs_env,
-            xyz_output=int(md_save_time*timestep),
         )
 
     elif simu_type.lower() == "tg":
@@ -291,9 +287,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-M",
-        "--molality_salt",
-        help="Molality of salt in mol/kg",
-        default="1",
+        "--alkali_count",
+        help="number of alkali metal",
+        default="100",
     )
     parser.add_argument(
         "-cs",
@@ -345,43 +341,30 @@ if __name__ == "__main__":
         default="conductivity",
     )
     parser.add_argument(
-        "--htvs_env",
-        help="HTVS environment",
-        default="htvs",
+        "--lit_charges_save_path",
+        help="Path to the where the DFT charge CSV file is saved",
+        default=".",
     )
     args = parser.parse_args()
 
     if args.hitpoly_path == "None":
         args.hitpoly_path = None
 
-    # The file from which the smiles strings are read should have the following format:
-    # [smiles_string_1].[smiles_string_2].[smiles_string_3] 
-    # [ratio_1],[ratio_2],[ratio_3]
-    # [ratios_type] # either 'mol' or 'weight', default is 'mol'
     with open(args.smiles_path, "r") as f:
         lines = f.readlines()
         smiles = lines[0].split(".")
-        if len(smiles) > 1:
-            ratios = np.array(ast.literal_eval(lines[1]))
-            ratios = (ratios / ratios.sum()).tolist()
-            if len(lines) > 2:
-                ratios_type = lines[2].strip()
-            else:
-                ratios_type = 'mol'
-            assert len(smiles) == len(ratios)
-        else:
-<<<<<<< HEAD
-            mol_ratios = None
+        mol_ratios = lines[1].split(",")
+        mol_ratios = [int(i) for i in mol_ratios]
+        assert len(smiles) == len(mol_ratios)
+
         if len(lines) == 3:
             """
-            3rd line is the DFT charge CSV file name for each molecule.
+            3rd line is the DFT charge CSV file path for each molecule.
             This line is optional.
             """
             polynames = lines[2].split(",")
-=======
-            ratios = None
-            ratios_type = None
->>>>>>> origin/main
+            print(polynames)
+            #assert len(smiles) == len(polynames)
     
     if args.atom_count == "None":
         atom_count = None
@@ -393,7 +376,8 @@ if __name__ == "__main__":
     else:
         polymer_chain_length = int(args.polymer_chain_length)
     if args.charge_type == "LIT":
-        print("polynames: ", polynames)
+        print(polynames)
+        #assert len(polynames) == len(smiles)
     else:
         polynames = None
 
@@ -403,7 +387,7 @@ if __name__ == "__main__":
         smiles=smiles,
         charge_scale=float(args.charge_scale),
         salt_type=args.salt_type,
-        molality=float(args.molality_salt),
+        alkali_count=int(args.alkali_count),
         charges=args.charge_type,
         polynames=polynames,
         lit_charges_save_path=args.lit_charges_save_path,
@@ -414,9 +398,7 @@ if __name__ == "__main__":
         simu_length=int(args.simu_length),
         platform=args.platform,
         polymer_chain_length=polymer_chain_length,
-        ratios=ratios,
-        ratios_type=ratios_type,
+        mol_ratios=mol_ratios,
         hitpoly_path=args.hitpoly_path,
         simu_type=args.simu_type,
-        htvs_env=args.htvs_env,
     )

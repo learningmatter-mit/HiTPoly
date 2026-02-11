@@ -1,5 +1,7 @@
 from sys import stdout
 import os
+from openmm.unit import kelvin
+import numpy as np
 import time
 from rdkit import Chem
 from openmm.app import (
