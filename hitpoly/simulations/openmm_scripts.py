@@ -1304,7 +1304,7 @@ def write_analysis_script(
     simu_temperature,
     prod_run_time,
     hitpoly_path,
-    xyz_output=25,  # ps
+    xyz_output=20,  # ps
     ani_name_rdf="None",
     poly_name="None",
     htvs_env='htvs',

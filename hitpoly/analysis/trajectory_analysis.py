@@ -794,7 +794,8 @@ def get_coords_PDB_msd(
                                 atom_names.append(values[-1] + f",{mol}")
                         poly_ind += 1
 
-            if any(mol in line[17:20] for mol in mol_names):
+            # if any(mol in line[17:20] for mol in mol_names):
+            if line.startswith('HETATM'):
                 values = line.split()
                 x = float(line[30:38])
                 y = float(line[38:46])
@@ -808,7 +809,6 @@ def get_coords_PDB_msd(
                                 masses.append(ELEMENT_TO_MASS[i[0]])
                     else:
                         masses.append(ELEMENT_TO_MASS[values[-1]])
-
         # Calculating the COM of the final frame
         prev_frame = np.array(prev_frame)
         cur_frame = np.array(cur_frame)
@@ -1256,6 +1256,8 @@ def plot_calc_diffu(
     D_poly_err_list = []
     m_poly_loglog = []
     for ind, poly_idxs in enumerate(poly_idxs_list):
+        if len(poly_idxs) == 0:
+            continue
         start_poly = xyz[0, poly_idxs]
         displ_vec = xyz[:, poly_idxs] - start_poly
         MSDs = np.power(displ_vec, 2).sum(axis=2)

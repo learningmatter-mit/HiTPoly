@@ -34,6 +34,7 @@ def run(
     simu_length:int,
     md_save_time:int,
     hitpoly_path:str,
+    timestep:float=0.002,
     platform:str='local',
     polymer_chain_length:int=None,
     simu_type="conductivity",
@@ -236,6 +237,7 @@ def run(
             mdOutputTime=md_save_time,
             simu_time=simu_length,
             cuda_device=cuda_device,
+            timestep=timestep,
         )
 
         write_analysis_script(
@@ -251,6 +253,7 @@ def run(
             poly_name=','.join(poly_name),
             hitpoly_path=hitpoly_path,
             htvs_env=htvs_env,
+            xyz_output=int(md_save_time*timestep),
         )
 
     elif simu_type.lower() == "tg":

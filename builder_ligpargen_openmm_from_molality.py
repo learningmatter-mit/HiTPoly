@@ -27,7 +27,9 @@ def run(
     polymer_count=30,
     charges="LPG",
     add_end_Cs=True,
+    md_save_time=10000,
     hitpoly_path=None,
+    timestep=0.002,
     htvs_path=None,
     salt_type=None,
     lit_charges_save_path=None,
@@ -190,7 +192,9 @@ def run(
         save_path=save_path,
         final_save_path=final_save_path,
         simu_temp=simu_temp,
+        mdOutputTime=md_save_time,
         simu_time=simu_length,
+        timestep=timestep,
     )
 
     write_analysis_script(
@@ -203,6 +207,7 @@ def run(
         ani_name_rdf=ani_name_rdf,
         cation=salt_type.split(".")[0],
         anion=ani_name_rdf.split(",")[0],
+        xyz_output=int(md_save_time*timestep),
     )
 
 
@@ -288,6 +293,12 @@ if __name__ == "__main__":
         help="What type of simulation to perform, options [conductivity, tg]}",
         default="conductivity",
     )
+    parser.add_argument(
+        "-md_save_time",
+        "--md_save_time",
+        help="MD save time",
+        default="10000",
+    )
     parser.add_argument("--temperature", help="Simulation temperature", default="430")
     parser.add_argument("--simu_length", help="Simulation length, ns", default="100")
     parser.add_argument(
@@ -321,6 +332,7 @@ if __name__ == "__main__":
         molality=float(args.molality_salt),
         charges=args.charge_type,
         add_end_Cs=add_end_Cs,
+        md_save_time=int(args.md_save_time),
         reaction=args.reaction,
         product_index=int(args.product_index),
         box_multiplier=float(args.box_multiplier),
