@@ -13,6 +13,7 @@ from hitpoly.simulations.openmm_scripts import (
     equilibrate_system_liquid2,
     prod_run_nvt,
     write_analysis_script,
+    prod_run_tg,
 )
 from distutils.dir_util import copy_tree
 import sys
@@ -21,36 +22,30 @@ sys.setrecursionlimit(5000)
 
 
 def run(
-    save_path,
-    results_path,
-    smiles,
-    charge_scale=0.75,
-    solvent_count=[30],
-    repeats=1,
-    ligpargen_repeats=1,
-    salt_type="Li.TFSI",
-    concentration=100,
-    charges="LPG",
-    add_end_Cs=True,
-    hitpoly_path=None,
-    lit_charges_save_path=None,
-    reaction="[Cu][*:1].[*:2][Au]>>[*:1]-[*:2]",
-    product_index=0,
-    box_multiplier=2,
-    enforce_generation=False,
-    simu_temp=430,
-    simu_length=100,
-    md_save_time=12500,
-    platform="local",
-    is_liquid=False
+    save_path:str,
+    results_path:str,
+    smiles:list,
+    charge_scale:float,
+    salt_type:str,
+    concentration:float,
+    solvent_count:list,
+    repeats:list,
+    charges:str,
+    system:str,
+    add_end_Cs:bool,
+    hitpoly_path:str,
+    lit_charges_save_path:str=None,
+    timestep:float=0.002,
+    simu_temp:int=430,
+    simu_length:int=100,
+    md_save_time:int=12500,
+    platform:str='local',
+    simu_type:str="conductivity",
+    htvs_env:str='htvs',
 ):
-    """
-    is_liquid (boolean) : after "equilibrate_system_1", 
-    whether to use second equilibration step as "equilibrate_system_liquid"
-    or "equilibrate_system_2"
-    liquids do not need high pressure equilibration
-    """
+
     # don't forget to export the path to your packmol in the bashrc
+    cuda_device = "0"
     packmol_path = os.environ["packmol"]
     if not hitpoly_path:
         hitpoly_path = f"{os.path.expanduser('~')}/HiTPoly"
@@ -74,6 +69,9 @@ def run(
     atoms_long_list = []
     param_dict_list = []
 
+    with open(f"{save_path}/repeats.txt", "w") as f:
+        f.write(str(repeats))
+
     for ind, i in enumerate(smiles):
         if len(smiles) == 1:
             extra_name = ""
@@ -84,9 +82,6 @@ def run(
             name = f"polymer_conformation{extra_name}.pdb"
             filename_list.append(name)
 
-        with open(f"{save_path}/repeats{extra_name}.txt", "w") as f:
-            f.write(str(repeats))
-
         ligpargen_path = f"{save_path}/ligpargen{extra_name}"
         print(f"ligpargen path: {ligpargen_path}")
         if not os.path.isdir(ligpargen_path):
@@ -94,10 +89,8 @@ def run(
         
         long_smiles, _ = create_long_smiles(
             i,
-            repeats=repeats,
-            add_end_Cs=add_end_Cs,
-            reaction=reaction,
-            product_index=product_index,
+            repeats=repeats[ind],
+            add_end_Cs=True,
         )
         long_smiles_list.append(long_smiles)
 
@@ -109,14 +102,28 @@ def run(
         atom_names_long_list.append(atom_names_long)
         atoms_long_list.append(atoms_long)
         
+        (
+            ligpargen_repeats,
+            smiles_initial,
+            mol_initial,
+            r,
+            atom_names,
+            atoms,
+            bonds_typed,
+        ) = create_ligpargen_short_polymer(
+            i,
+            add_end_Cs=add_end_Cs,
+            reaction="[Cu][*:1].[*:2][Au]>>[*:1]-[*:2]",
+            product_index=0,
+            atom_names_long=atom_names_long,
+        )
+
         mol_initial, _ = create_ligpargen(
             smiles=i,
             repeats=ligpargen_repeats,
             add_end_Cs=add_end_Cs,
             ligpargen_path=ligpargen_path,
             hitpoly_path=hitpoly_path,
-            reaction=reaction,
-            product_index=product_index,
             platform=platform,
         )
 
@@ -133,7 +140,6 @@ def run(
             save_path,
             long_smiles,
             name=name,
-            enforce_generation=enforce_generation,
         )
         
         print(f"Saved conformer pdb.")
@@ -150,7 +156,15 @@ def run(
                 lit_charges_save_path=lit_charges_save_path,
                 charges=charges,
                 name=name,
+                cuda_device=cuda_device,
             )
+
+    if system == "gel":
+        box_multiplier = 0.2
+    elif system == "liquid":
+        box_multiplier = 10
+    elif system == "polymer":
+        box_multiplier = 1
 
     create_box_and_ff_files_openmm(
         save_path=save_path,
@@ -183,48 +197,68 @@ def run(
         final_save_path=final_save_path,
     )
 
-    if not is_liquid:
-
+    if system == "polymer" or system == "gel":
         equilibrate_system_1(
             save_path=save_path,
             final_save_path=final_save_path,
+            cuda_device=cuda_device,
         )
 
         equilibrate_system_2(
             save_path=save_path,
             final_save_path=final_save_path,
+            cuda_device=cuda_device,
         )
     else:
         equilibrate_system_liquid1(
             save_path=save_path,
             final_save_path=final_save_path,
             simu_temp=simu_temp,
+            cuda_device=cuda_device,
         )
         equilibrate_system_liquid2(
             save_path=save_path,
             final_save_path=final_save_path,
             simu_temp=simu_temp,
+            cuda_device=cuda_device,
         )
 
-    prod_run_nvt(
-        save_path=save_path,
-        final_save_path=final_save_path,
-        simu_temp=simu_temp,
-        mdOutputTime=md_save_time,
-        simu_time=simu_length,
-    )
+    if simu_type == "conductivity":
+        prod_run_nvt(
+            save_path=save_path,
+            final_save_path=final_save_path,
+            simu_temp=simu_temp,
+            mdOutputTime=md_save_time,
+            simu_time=simu_length,
+            cuda_device=cuda_device,
+            timestep=timestep,
+        )
 
-    write_analysis_script(
-        save_path=save_path,
-        results_path=results_path,
-        platform=platform,
-        repeat_units=repeats,
-        cation=salt_type.split(".")[0],
-        anion=ani_name_rdf.split(",")[0],
-        simu_temperature=simu_temp,
-        prod_run_time=simu_length,
-        ani_name_rdf=ani_name_rdf,
-    )
+        write_analysis_script(
+            save_path=save_path,
+            results_path=results_path,
+            platform=platform,
+            repeat_units=repeats,
+            cation=salt_type.split(".")[0],
+            anion=ani_name_rdf.split(",")[0],
+            simu_temperature=simu_temp,
+            prod_run_time=simu_length,
+            ani_name_rdf=ani_name_rdf,
+            poly_name=','.join(smiles),
+            hitpoly_path=hitpoly_path,
+            htvs_env=htvs_env,
+            xyz_output=int(md_save_time*timestep),
+        )
+
+    elif simu_type.lower() == "tg":
+        prod_run_tg(
+            save_path=save_path,
+            final_save_path=final_save_path,
+            simu_time=10,
+            start_temperature=500,
+            end_temperature=100,
+            temperature_step=20,
+        )
 
 
 if __name__ == "__main__":
@@ -256,11 +290,6 @@ if __name__ == "__main__":
         default="50",
     )
     parser.add_argument(
-        "--ligpargen_repeats",
-        help="How many repeat units in the initial polymer chain to be parametrized (max of 200 atoms), can be a list of values, ex, '3,3'",
-        default="3",
-    )
-    parser.add_argument(
         "--salt_type",
         help="Type of the salt to be added to the simulation",
         default="Li.TFSI",
@@ -280,42 +309,12 @@ if __name__ == "__main__":
         "-ct", "--charge_type", help="What type of charges to select", default="LPG"
     )
     parser.add_argument(
-        "-ecs",
-        "--end_carbons",
-        help="When creating polymer if end carbons should be added",
-        default="True",
-    )
-    parser.add_argument(
         "-f",
         "--hitpoly_path",
         help="Path towards the HiTPoly folder",
         default="None",
     )
-    parser.add_argument(
-        "-react",
-        "--reaction",
-        help="Reaction that creates the polymer",
-        default="[Cu][*:1].[*:2][Au]>>[*:1]-[*:2]",
-    )
-    parser.add_argument(
-        "-pi",
-        "--product_index",
-        help="Product index which to use for the smarts reaction",
-        default="0",
-    )
-    parser.add_argument(
-        "-box",
-        "--box_multiplier",
-        help="PBC box size multiplier for packmol, poylmers <1, other molecules (solvents) 4-10",
-        default="0.5",
-    )
-    parser.add_argument(
-        "-conf",
-        "--enforce_generation",
-        help="Whether to force rdkit to create a conformation",
-        default="False",
-    )
-    parser.add_argument("--temperature", help="Simulation temperature", default="415")
+    parser.add_argument("--temperature", help="Simulation temperature", default="430")
     parser.add_argument("--simu_length", help="Simulation length, ns", default="100")
     parser.add_argument(
         "--md_save_time", help="Simulation length, ns", default="12500"
@@ -324,22 +323,35 @@ if __name__ == "__main__":
         "--platform", help="For which platform to build the files for", default="local"
     )
     parser.add_argument(
-        "--is_liquid", help="Whether to use second equilibration step as 'equilibrate_system_liquid'", default="False"
+        "-system",
+        "--system",
+        help="System to be used for the simulation",
+        default="polymer",
     )
-
-
+    parser.add_argument(
+        "--simu_type",
+        help="What type of simulation to perform, options [conductivity, tg]}",
+        default="conductivity",
+    )
+    parser.add_argument(
+        "--htvs_env",
+        help="HTVS environment",
+        default="htvs",
+    )
+    parser.add_argument(
+        "--add_end_Cs",
+        help="Whether to add end carbons to the polymer",
+        default="True",
+    )
     args = parser.parse_args()
-    if args.end_carbons == "false" or args.end_carbons == "False":
-        add_end_Cs = False
-    else:
+
+    if args.add_end_Cs == "True":
         add_end_Cs = True
+    else:
+        add_end_Cs = False
 
     if args.hitpoly_path == "None":
         args.hitpoly_path = None
-    if args.enforce_generation == "False":
-        args.enforce_generation = False
-    else:
-        args.enforce_generation = True
     if args.salt_type == "None":
         args.salt_type = None
 
@@ -355,26 +367,26 @@ if __name__ == "__main__":
     solvent_count = args.solvent_count.split(",")
     solvent_count = [int(i) for i in solvent_count]
 
+    repeats = args.repeats.split(",")
+    repeats = [int(i) for i in repeats]
+
     run(
         save_path=args.save_path,
         results_path=args.results_path,
         smiles=smiles,
         charge_scale=float(args.charge_scale),
-        solvent_count=solvent_count,
-        concentration=int(args.concentration),
-        repeats=int(args.repeats),
-        ligpargen_repeats=int(args.ligpargen_repeats),
         salt_type=args.salt_type,
+        concentration=float(args.concentration),
+        solvent_count=solvent_count,
+        repeats=repeats,
         charges=args.charge_type,
+        system=args.system,
         add_end_Cs=add_end_Cs,
         hitpoly_path=args.hitpoly_path,
-        reaction=args.reaction,
-        product_index=int(args.product_index),
-        box_multiplier=float(args.box_multiplier),
-        enforce_generation=args.enforce_generation,
         simu_temp=int(args.temperature),
         simu_length=int(args.simu_length),
         md_save_time=int(args.md_save_time),
         platform=args.platform,
-        is_liquid=bool(args.is_liquid)
+        simu_type=args.simu_type,
+        htvs_env=args.htvs_env,
     )
