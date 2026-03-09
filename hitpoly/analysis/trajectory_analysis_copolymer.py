@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
-import ast
 
 from tqdm import tqdm
 
@@ -15,7 +14,7 @@ from openmm.app import PDBFile
 import itertools
 import time
 import pickle as pkl
-from hitpoly.utils.constants import ELEMENT_TO_MASS
+from ffnet.utils.constants import ELEMENT_TO_MASS
 
 FS_TO_NS = 1e-6
 ELEC = 1.60217662 * (1e-19)  # C
@@ -323,68 +322,137 @@ def torch_nbr_list(
     return i, j, offsets
 
 
+# def get_molecules(nbr_list, all_ion_atoms):
+#     """
+#     Args:
+#         nbr_list: list of atoms that are within some cutoff from one another
+#         all_ion_atoms: array indeces of all ions
+#     Returns:
+#         list of arrays, where each array has the indeces of the molecules within the same cluster
+#     """
+#     clusters = np.zeros(len(all_ion_atoms), dtype=int)
+#     for i, cur in enumerate(all_ion_atoms):
+#         # the most recent added cluster index (counter)
+#         mm = max(clusters)
+#         # oxy_neighbors contains all the atoms that the current atom is in the cutoff of
+#         oxy_neighbors = nbr_list[nbr_list[:, 0] == cur].reshape(-1)
+#         # if this has no neighbors, then the current atom will belong to a new cluster
+#         if len(oxy_neighbors) == 0:
+#             clusters[i] = mm + 1
+#             continue
+#         # if all the neighbors are in unassigned clusters and the current atom has already been assigned,
+#         # assign the neighbors to the current cluster
+#         if (clusters[oxy_neighbors] == 0).all() and clusters[i] != 0:
+#             clusters[oxy_neighbors] = clusters[i]
+#         # if all the neighbors are in unassigned clusters and the curent cluster is also unassigned
+#         # assign the current atom and all the neighbors to a new cluster
+#         elif (clusters[oxy_neighbors] == 0).all() and clusters[i] == 0:
+#             clusters[oxy_neighbors] = mm + 1
+#             clusters[i] = mm + 1
+#         # if not all the neighbors are in unassigned clusters (so if at least one neighbor has been assigned)
+#         # and the current atom has not been assigned yet, assign the current atom and all neighbors to
+#         # the lowest cluster name (choosing the minimum cluster name as default is arbitrary,
+#         # as long as all have same)
+#         elif not (clusters[oxy_neighbors] == 0).all() and clusters[i] == 0:
+#             clusters[i] = min(clusters[oxy_neighbors][clusters[oxy_neighbors] != 0])
+#             clusters[oxy_neighbors] = min(
+#                 clusters[oxy_neighbors][clusters[oxy_neighbors] != 0]
+#             )
+#         # if not all the neighbors are in unassigned clusters and current atom has been assigned,
+#         elif not (clusters[oxy_neighbors] == 0).all() and clusters[i] != 0:
+#             # temporary is the first you only take the clusters that are neighbors
+#             # then you only take the nonzero of those neighboring clusters
+#             # then you only take the ones that are not the minimum of those nonzero neighboring clusters
+#             tmp = clusters[oxy_neighbors]
+#             tmp = tmp[tmp != 0]
+#             tmp = tmp[tmp != min(tmp)]
+#             # set the current cluster to the minimum of these nonzero, neighboring clusters
+#             clusters[i] = min(clusters[oxy_neighbors][clusters[oxy_neighbors] != 0])
+#             # then, set all the neighboring atoms to this same minimum cluster name
+#             clusters[oxy_neighbors] = min(
+#                 clusters[oxy_neighbors][clusters[oxy_neighbors] != 0]
+#             )
+#             # temp contains all the nonzero neighboring cluster types
+#             # for each of these nonzero neighboring cluster types, change them to the overall minimum same clustering name
+#             for tr in tmp:
+#                 clusters[np.where(clusters == tr)[0]] = min(
+#                     clusters[oxy_neighbors][clusters[oxy_neighbors] != 0]
+#                 )
+#     molecules = []
+#     for i in range(1, max(clusters) + 1):
+#         if np.size(np.where(clusters == i)[0]) == 0:
+#             continue
+#         molecules.append(np.where(clusters == i)[0])
+#     return molecules
+
+##FIXED CLUSTER MAPPING
+
 def get_molecules(nbr_list, all_ion_atoms):
     """
     Args:
-        nbr_list: list of atoms that are within some cutoff from one another
-        all_ion_atoms: array indeces of all ions
+        nbr_list: Nx2 array of pairs of atoms that are neighbors
+                  indices are relative to the subset of selected atoms
+        all_ion_atoms: array of indices (relative to the selected atom array)
+                       identifying which atoms are ions
+
     Returns:
-        list of arrays, where each array has the indeces of the molecules within the same cluster
+        list of arrays, where each array has the indices (local in all_ion_atoms)
+        of atoms belonging to the same cluster
     """
+
+    # Map from absolute (local-to-selected-atoms) index → local index within all_ion_atoms
+    abs_to_local = {abs_idx: local_idx for local_idx, abs_idx in enumerate(all_ion_atoms)}
+
     clusters = np.zeros(len(all_ion_atoms), dtype=int)
+
     for i, cur in enumerate(all_ion_atoms):
-        # the most recent added cluster index (counter)
-        mm = max(clusters)
-        # oxy_neighbors contains all the atoms that the current atom is in the cutoff of
-        oxy_neighbors = nbr_list[nbr_list[:, 0] == cur].reshape(-1)
-        # if this has no neighbors, then the current atom will belong to a new cluster
+
+        mm = clusters.max()
+
+        # Find neighbors of current atom
+        oxy_neighbors_abs = nbr_list[nbr_list[:, 0] == cur, 1]
+
+        # Keep only neighbors that are also in all_ion_atoms
+        oxy_neighbors_abs = [n for n in oxy_neighbors_abs if n in abs_to_local]
+
+        # Remap neighbor indices to local indices in all_ion_atoms
+        oxy_neighbors = np.array([abs_to_local[n] for n in oxy_neighbors_abs], dtype=int)
+
         if len(oxy_neighbors) == 0:
             clusters[i] = mm + 1
             continue
-        # if all the neighbors are in unassigned clusters and the current atom has already been assigned,
-        # assign the neighbors to the current cluster
+
         if (clusters[oxy_neighbors] == 0).all() and clusters[i] != 0:
             clusters[oxy_neighbors] = clusters[i]
-        # if all the neighbors are in unassigned clusters and the curent cluster is also unassigned
-        # assign the current atom and all the neighbors to a new cluster
+
         elif (clusters[oxy_neighbors] == 0).all() and clusters[i] == 0:
             clusters[oxy_neighbors] = mm + 1
             clusters[i] = mm + 1
-        # if not all the neighbors are in unassigned clusters (so if at least one neighbor has been assigned)
-        # and the current atom has not been assigned yet, assign the current atom and all neighbors to
-        # the lowest cluster name (choosing the minimum cluster name as default is arbitrary,
-        # as long as all have same)
+
         elif not (clusters[oxy_neighbors] == 0).all() and clusters[i] == 0:
             clusters[i] = min(clusters[oxy_neighbors][clusters[oxy_neighbors] != 0])
-            clusters[oxy_neighbors] = min(
-                clusters[oxy_neighbors][clusters[oxy_neighbors] != 0]
-            )
-        # if not all the neighbors are in unassigned clusters and current atom has been assigned,
+            clusters[oxy_neighbors] = clusters[i]
+
         elif not (clusters[oxy_neighbors] == 0).all() and clusters[i] != 0:
-            # temporary is the first you only take the clusters that are neighbors
-            # then you only take the nonzero of those neighboring clusters
-            # then you only take the ones that are not the minimum of those nonzero neighboring clusters
             tmp = clusters[oxy_neighbors]
             tmp = tmp[tmp != 0]
             tmp = tmp[tmp != min(tmp)]
-            # set the current cluster to the minimum of these nonzero, neighboring clusters
+
             clusters[i] = min(clusters[oxy_neighbors][clusters[oxy_neighbors] != 0])
-            # then, set all the neighboring atoms to this same minimum cluster name
-            clusters[oxy_neighbors] = min(
-                clusters[oxy_neighbors][clusters[oxy_neighbors] != 0]
-            )
-            # temp contains all the nonzero neighboring cluster types
-            # for each of these nonzero neighboring cluster types, change them to the overall minimum same clustering name
+            clusters[oxy_neighbors] = clusters[i]
+
             for tr in tmp:
-                clusters[np.where(clusters == tr)[0]] = min(
-                    clusters[oxy_neighbors][clusters[oxy_neighbors] != 0]
-                )
+                clusters[clusters == tr] = clusters[i]
+
     molecules = []
-    for i in range(1, max(clusters) + 1):
-        if np.size(np.where(clusters == i)[0]) == 0:
-            continue
-        molecules.append(np.where(clusters == i)[0])
+    for i in range(1, clusters.max() + 1):
+        indices = np.where(clusters == i)[0]
+        if indices.size > 0:
+            molecules.append(indices)
+
     return molecules
+
+
 
 
 def get_molecule_population_matrix(
@@ -394,7 +462,6 @@ def get_molecule_population_matrix(
     atom_names,
     atom_names_list,
     cutoff=3.25,
-    anion_solv_atoms=1,
 ):
     """
     Function to get the population matrix of clusters across the whole
@@ -404,16 +471,23 @@ def get_molecule_population_matrix(
         cell - 3x3 matrix of the cell size (PBC)
         atom_names - long atom names loaded from the read_xyz function
         cutoff - cutoff for measuring clustering (3.25 from France-Lanord and Molinari papers)
-        anion_solv_atoms - number of anion atoms per anion molecule
     Return:
         all_mol - repeating numpy array where every three arrays is the next timestep
             clustering information, 1st line is the cation amount in cluster, 2nd line
             is the anion amount in cluster, 3rd line is the cluster amount for those cation
             anion amounts
     """
+    print("DEBUG entered get_molecule_population_matrix")
+
+    print("DEBUG FULL atom_names list:")
+    for idx, name in enumerate(atom_names):
+        print(f"{idx}: {name}")
+
+        print("DEBUG atom_names_list:", atom_names_list)
+
     xyz_msd = wrap_xyz(xyz, cell)
-    salt_types = [i[1] for i in atom_names_list if not 'PL' in i[1]]
-    salt_atoms = [i[0] for i in atom_names_list if not 'PL' in i[1]]
+    salt_types = [i[1] for i in atom_names_list]
+    salt_atoms = [i[0] for i in atom_names_list]
     atom_inxs = [
         cur.split("-")[1] in salt_types and cur.split("-")[0] in salt_atoms
         # cur.split("-")[1] in ["PL1", "CA1"] and cur.split("-")[0] in ["N", "Li"]
@@ -428,7 +502,6 @@ def get_molecule_population_matrix(
     an1 = [cur.split("-")[1] == salt_types[1] for cur in np.array(atom_names)[atom_inxs]]
     # an1 = [cur.split("-")[1] == "PL1" for cur in np.array(atom_names)[atom_inxs]]
     an1 = np.nonzero(an1)[0]
-    an1_dict = {i:i//anion_solv_atoms for i in set(an1.reshape(-1))}
     orig_an1 = [
         cur.split("-")[1] == salt_types[1] and cur.split("-")[0] == salt_atoms[1]
         # cur.split("-")[1] == "PL1" and cur.split("-")[0] == "N"
@@ -438,6 +511,9 @@ def get_molecule_population_matrix(
 
     all_ion_atoms = np.concatenate([an1.reshape(-1), cations])
     max_num = max(len(an1), len(cations))
+
+    print("DEBUG all_ion_atoms shape:", all_ion_atoms.shape)
+    print("DEBUG all_ion_atoms values:", all_ion_atoms)
 
     all_mol = []
     max_mols = 0
@@ -454,13 +530,16 @@ def get_molecule_population_matrix(
         )
         nbr_list = np.stack([edge_from, edge_to], axis=1)
 
+         # Print neighbor list shape and max indices
+        print("DEBUG nbr_list shape:", nbr_list.shape)
+        if nbr_list.size > 0:
+            print("DEBUG max index in nbr_list:", nbr_list.max())
+
         molecules = get_molecules(nbr_list, all_ion_atoms)
 
         for molecule in molecules:
             num_cat = len(set(molecule).intersection(set(cations)))
-            ani_set = set(molecule).intersection(set(an1.reshape(-1)))
-            mapped_ani_values = [an1_dict[val] for val in ani_set]
-            num_an1 = len(set(mapped_ani_values))
+            num_an1 = len(set(molecule).intersection(set(an1.reshape(-1))))
             popmatrix[num_cat, num_an1] += 1
         all_mol.append(
             np.vstack(
@@ -487,83 +566,240 @@ def get_molecule_population_matrix(
 
     return all_mol
 
-
-def get_coords_PDB_rdf(
+##current from ffnet
+def get_coords_PDB_msd(
     folder,
-    frame_count,  # ns
+    pre_folder,
+    atom_name_list,
     save_interval=5,  # ps
-    frame_save_amount=100,
+    repeat_units=None,
+    cell=None,
 ):
     """
-    Saves unwrapped 100 xyz frames at the beginning of the simulation
-    at the middle of it and at the end.
+    THIS IS GOING TO BE COM'D NOW BIIIIIAAAA***
     """
-    xyz_1 = []
-    xyz_2 = []
-    xyz_3 = []
+    xyz = []
     atom_names = []
-    curr_frame = 0
+    frames = 0
 
-    frame_intervals = [frame_save_amount, int(frame_count / 2), frame_count]
-
-    exclude_tags = ["TER", "ENDMDL", "TITLE", "REMARK", "CRYST1", "MODEL"]
+    polymer_msd = False
+    for i in atom_name_list:
+        if "PL1" in i:
+            polymer_msd = True
+    if polymer_msd:
+        pdb = PDBFile(f"{pre_folder}/polymer_conformation.pdb")
+        atoms_poly = [i.element._symbol for i in pdb.topology.atoms()]
+        poly_atom_ind = [
+            i for i, e in enumerate(atoms_poly) if e in ["O", "S", "N", "Si", "Br"]
+        ]
+        # Either works with defining repeat_units as an argument to run_analysis
+        # or reading a repeats.txt file that from 09/14/24 is saved from builder files
+        # or having Jurgis naming conventions
+        if not repeat_units:
+            if os.path.exists(f"{pre_folder}/repeats.txt"):
+                with open(f"{pre_folder}/repeats.txt", "r") as f:
+                    repeat_units = int(f.readlines()[0])
+            else:
+                repeat_units = int(pre_folder.split("/")[-2].split("_")[1][1:])
+        poly_counter = len(poly_atom_ind) // repeat_units
+        atom_name_list[-1] = [atoms_poly[poly_atom_ind[0]], "PL1"]
+    COMS = []
+    cur_frame = []
+    prev_frame = []
+    masses = []
     with open(f"{folder}/simu_output.pdb", "r") as f:
+        poly_ind = 0
         for ind, line in enumerate(f):
             if "MODEL" in line:
-                curr_frame += 1
-                continue
-            if not any(ext in line for ext in exclude_tags):
-                if (
-                    curr_frame > frame_intervals[0] - frame_save_amount
-                    and curr_frame < frame_intervals[0]
-                ):
-                    x = float(line[30:38])
-                    y = float(line[38:46])
-                    z = float(line[46:54])
-                    xyz_1.append(np.array([x, y, z], dtype=np.float32))
-                    if curr_frame < 2:
-                        values = line.split()
-                        if values[3] == "CA1":
-                            atom_names.append(
-                                "Li" + f",{line[17:20]},{line[20:26].strip()}"
-                            )
-                        else:
-                            atom_names.append(
-                                values[-1] + f",{line[17:20]},{line[20:26].strip()}"
-                            )
-                elif (
-                    curr_frame > frame_intervals[1] - frame_save_amount
-                    and curr_frame < frame_intervals[1]
-                ):
-                    x = float(line[30:38])
-                    y = float(line[38:46])
-                    z = float(line[46:54])
-                    xyz_2.append(np.array([x, y, z], dtype=np.float32))
-                elif (
-                    curr_frame > frame_intervals[2] - frame_save_amount
-                    and curr_frame < frame_intervals[2]
-                ):
-                    x = float(line[30:38])
-                    y = float(line[38:46])
-                    z = float(line[46:54])
-                    xyz_3.append(np.array([x, y, z], dtype=np.float32))
-                elif curr_frame > frame_intervals[2]:
-                    break
+                if prev_frame:
+                    prev_frame = np.array(prev_frame)
+                    cur_frame = np.array(cur_frame)
+                    cur_frame = unwrap(cur_frame, prev_frame, cell)
+                    masses = np.array(masses)
+                    total_mass = np.sum(masses)
+                    COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
+                    cur_frame = cur_frame.tolist()
+                if frames == 1:
+                    cur_frame = np.array(cur_frame)
+                    masses = np.array(masses)
+                    total_mass = np.sum(masses)
+                    COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
+                    cur_frame = cur_frame.tolist()
 
-    with open(f"{folder}/xyz_wrapped_rdf_beginning.txt", "w") as f:
-        for xyz in xyz_1:
+                prev_frame = cur_frame
+                cur_frame = []
+                frames += 1
+
+            for atom, mol in atom_name_list:
+                if mol in line and mol != "PL1":
+                    values = line.split()
+                    if atom.lower() == values[-1].lower() or values[3] == "CA1":
+                        x = float(line[30:38])
+                        y = float(line[38:46])
+                        z = float(line[46:54])
+                        xyz.append(np.array([x, y, z], dtype=np.float32))
+                        if frames < 2:
+                            # Harcoding CA1 as the only cation
+                            if values[3] == "CA1":
+                                atom_names.append(atom + f",{mol}")
+                            else:
+                                atom_names.append(values[-1] + f",{mol}")
+                if mol == "PL1" and mol in line:
+                    values = line.split()
+                    if values[-1].lower() in ["o", "s", "n", "si", "br"]:
+                        if poly_ind % poly_counter == 0:
+                            x = float(line[30:38])
+                            y = float(line[38:46])
+                            z = float(line[46:54])
+                            xyz.append(np.array([x, y, z], dtype=np.float32))
+                            if frames < 2:
+                                atom_names.append(values[-1] + f",{mol}")
+                        poly_ind += 1
+
+            if "PL1" in line or "CA1" in line or "AN1" in line:
+                values = line.split()
+                if "TER" == values[0]:
+                    continue
+                else:
+                    x = float(line[30:38])
+                    y = float(line[38:46])
+                    z = float(line[46:54])
+                    cur_frame.append(np.array([x, y, z], dtype=np.float32))
+
+                    if frames < 2:
+                        if values[3] == "CA1":
+                            masses.append(ELEMENT_TO_MASS["Li"])
+                        else:
+                            masses.append(ELEMENT_TO_MASS[values[-1]])
+
+        # Calculating the COM of the final frame
+        prev_frame = np.array(prev_frame)
+        cur_frame = np.array(cur_frame)
+        cur_frame = unwrap(cur_frame, prev_frame, cell)
+        masses = np.array(masses)
+        total_mass = np.sum(masses)
+        COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
+
+    xyz = np.array(xyz)
+    xyz = xyz.reshape(len(COMS), len(atom_names), 3)
+    for ind, com in enumerate(COMS):
+        xyz[ind] = xyz[ind] - com
+    xyz = xyz.reshape(-1, 3)
+
+    with open(f"{folder}/xyz_wrapped_msd.txt", "w") as f:
+        for xyz in xyz:
             f.write(f"{xyz[0]},{xyz[1]},{xyz[2]}\n")
-    with open(f"{folder}/xyz_wrapped_rdf_middle.txt", "w") as f:
-        for xyz in xyz_2:
-            f.write(f"{xyz[0]},{xyz[1]},{xyz[2]}\n")
-    with open(f"{folder}/xyz_wrapped_rdf_end.txt", "w") as f:
-        for xyz in xyz_3:
-            f.write(f"{xyz[0]},{xyz[1]},{xyz[2]}\n")
-    with open(f"{folder}/atom_names_rdf.txt", "w") as f:
+    with open(f"{folder}/atom_names_msd.txt", "w") as f:
         for i in atom_names:
             f.write(f"{i}\n")
-    print(f"RDF frames have been saved at {folder}")
+    with open(f"{folder}/frame_count.txt", "w") as f:
+        f.write(f"{frames-1}")  # This frames-1 might be completely unnecessary actually
 
+    simu_time = (frames - 1) * save_interval / 1000
+    print(
+        f"{frames} MSD frames have been saved at {folder}, simulation time {simu_time}"
+    )
+    return frames - 1, simu_time
+
+#this isn't functional yet, kyujong also needs to confirm that analysis is valid for taking the frame in our intervals
+def get_coords_PDB_coordinating_atoms(
+    folder,
+    atom_name_list,
+):
+    xyz = []
+    atom_names = []
+    frames = 0
+
+    COMS = []
+    cur_frame = []
+    prev_frame = []
+    masses = []
+
+    with open(f"{folder}/simu_output.pdb", "r") as f:
+        poly_ind = 0
+        for ind, line in enumerate(f):
+            if "MODEL" in line:
+                if prev_frame:
+                    prev_frame = np.array(prev_frame)
+                    cur_frame = np.array(cur_frame)
+                    cur_frame = unwrap(cur_frame, prev_frame, cell)
+                    masses = np.array(masses)
+                    total_mass = np.sum(masses)
+                    COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
+                    cur_frame = cur_frame.tolist()
+                if frames == 1:
+                    cur_frame = np.array(cur_frame)
+                    masses = np.array(masses)
+                    total_mass = np.sum(masses)
+                    COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
+                    cur_frame = cur_frame.tolist()
+
+                prev_frame = cur_frame
+                cur_frame = []
+                frames += 1
+
+            for atom, mol in atom_name_list:
+                if mol in line and mol != "PL1": #cation and anion
+                    values = line.split()
+                    if atom.lower() == values[-1].lower() or values[3] == "CA1":
+                        x = float(line[30:38])
+                        y = float(line[38:46])
+                        z = float(line[46:54])
+                        xyz.append(np.array([x, y, z], dtype=np.float32))
+                        if frames < 2:
+                            # Harcoding CA1 as the only cation
+                            if values[3] == "CA1":
+                                atom_names.append(atom + f",{mol}")
+                            else:
+                                atom_names.append(values[-1] + f",{mol}")
+                if mol == "PL1" and mol in line: #polymers
+                    values = line.split()
+                    if values[-1].lower() in ["o", "s", "n", "si", "br"]:
+                        
+                            x = float(line[30:38])
+                            y = float(line[38:46])
+                            z = float(line[46:54])
+                            xyz.append(np.array([x, y, z], dtype=np.float32))
+                            if frames < 2:
+                                atom_names.append(values[-1] + f",{mol}")
+                poly_ind += 1
+            
+            if "PL1" in line or "CA1" in line or "AN1" in line:
+                values = line.split()
+                if "TER" == values[0]:
+                    continue
+                else:
+                    x = float(line[30:38])
+                    y = float(line[38:46])
+                    z = float(line[46:54])
+                    cur_frame.append(np.array([x, y, z], dtype=np.float32))
+
+                    if frames < 2:
+                        if values[3] == "CA1":
+                            masses.append(ELEMENT_TO_MASS["Li"])
+                        else:
+                            masses.append(ELEMENT_TO_MASS[values[-1]])
+
+        # Calculating the COM of the final frame
+        prev_frame = np.array(prev_frame)
+        cur_frame = np.array(cur_frame)
+        cur_frame = unwrap(cur_frame, prev_frame, cell)
+        masses = np.array(masses)
+        total_mass = np.sum(masses)
+        COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
+
+    xyz = np.array(xyz)
+    xyz = xyz.reshape(len(COMS), len(atom_names), 3)
+    for ind, com in enumerate(COMS):
+        xyz[ind] = xyz[ind] - com
+    xyz = xyz.reshape(-1, 3)
+
+    with open(f"{folder}/xyz_wrapped_coordinating_atoms.txt", "w") as f:
+        for xyz in xyz:
+            f.write(f"{xyz[0]},{xyz[1]},{xyz[2]}\n")                       
+    with open(f"{folder}/atom_names_coordinating_atoms.txt", "w") as f:
+        for i in atom_names:
+            f.write(f"{i}\n")
 
 def get_coords_PDB_rdf_openmm(
     folder,
@@ -687,157 +923,7 @@ def get_coords_PDB_rdf_full_openmm(
     )
 
 
-def get_coords_PDB_msd(
-    folder,
-    pre_folder,
-    atom_name_list,
-    save_interval=5,  # ps
-    repeat_units=None,
-    cell=None,
-):
-    """
-    Saves the unwrapped xyz coordinates of the atoms in the atom_name_list at the save_interval
-    """
-    xyz = []
-    atom_names = []
-    frames = 0
 
-    polymer_msd = 0
-    for i in atom_name_list:
-        for j in i:
-            if "PL" in j:
-                polymer_msd += 1
-
-
-    if polymer_msd:
-        poly_counter = []
-        if not repeat_units:
-            if os.path.exists(f"{pre_folder}/repeats.txt"):
-                with open(f"{pre_folder}/repeats.txt", "r") as f:
-                    repeat_units = ast.literal_eval(f.readlines()[0])
-
-        for i in range(polymer_msd):
-            if polymer_msd > 1:
-                pdb = PDBFile(f"{pre_folder}/polymer_conformation_{i}.pdb")
-            elif os.path.exists(f"{pre_folder}/polymer_conformation.pdb"):
-                pdb = PDBFile(f"{pre_folder}/polymer_conformation.pdb")
-            else:
-                pdb = PDBFile(f"{pre_folder}/polymer_conformation_0.pdb")
-            atoms_poly = [i.element._symbol for i in pdb.topology.atoms()]
-            if repeat_units is not None and repeat_units[i] > 1:
-                poly_atom_ind = [
-                    i for i, e in enumerate(atoms_poly) if e in ["O", "S", "N", "Si", "Br"]
-                ]
-                poly_counter.append(len(poly_atom_ind) // int(repeat_units[i]))
-            else:
-                poly_atom_ind = [
-                    i for i, e in enumerate(atoms_poly) if e in ["O", "S", "N", "Si", "Br"]
-                ]
-                poly_counter.append(len(poly_atom_ind))
-
-            poly_in_name_list = False
-            for j in atom_name_list:
-                if j[1] in f"PL{i+1}":
-                    poly_in_name_list = True
-            if not poly_in_name_list:
-                atom_name_list.append([atoms_poly[poly_atom_ind[0]], f"PL{i+1}"])
-    COMS = []
-    cur_frame = []
-    prev_frame = []
-    masses = []
-    mol_names = [i[1] for i in atom_name_list]
-    with open(f"{folder}/simu_output.pdb", "r") as f:
-        poly_ind = 0
-        for ind, line in enumerate(f):
-            if line.startswith('TER'):
-                continue
-            if "MODEL" in line:
-                if prev_frame:
-                    prev_frame = np.array(prev_frame)
-                    cur_frame = np.array(cur_frame)
-                    cur_frame = unwrap(cur_frame, prev_frame, cell)
-                    masses = np.array(masses)
-                    total_mass = np.sum(masses)
-                    COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
-                    cur_frame = cur_frame.tolist()
-                if frames == 1:
-                    cur_frame = np.array(cur_frame)
-                    masses = np.array(masses)
-                    total_mass = np.sum(masses)
-                    COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
-                    cur_frame = cur_frame.tolist()
-
-                prev_frame = cur_frame
-                cur_frame = []
-                frames += 1
-
-            for atom, mol in atom_name_list:
-                values = line.split()
-                if mol in line and "PL" not in mol and "PL" not in line[17:20]:
-                    if atom.lower() == values[-1].lower() or 'CA' in line[17:20]:
-                        x = float(line[30:38])
-                        y = float(line[38:46])
-                        z = float(line[46:54])
-                        xyz.append(np.array([x, y, z], dtype=np.float32))
-                        if frames < 2:
-                            if 'CA' in line[17:20]:
-                                atom_names.append(atom + f",{mol}")
-                            else:
-                                atom_names.append(values[-1] + f",{mol}")
-                if "PL" in mol and mol in line and "PL" in line[17:20]:
-                    if values[-1].lower() in ["o", "s", "n", "si", "br"]:
-                        if poly_ind % poly_counter[int(mol[-1])-1] == 0:
-                            x = float(line[30:38])
-                            y = float(line[38:46])
-                            z = float(line[46:54])
-                            xyz.append(np.array([x, y, z], dtype=np.float32))
-                            if frames < 2:
-                                atom_names.append(values[-1] + f",{mol}")
-                        poly_ind += 1
-
-            # if any(mol in line[17:20] for mol in mol_names):
-            if line.startswith('HETATM'):
-                values = line.split()
-                x = float(line[30:38])
-                y = float(line[38:46])
-                z = float(line[46:54])
-                cur_frame.append(np.array([x, y, z], dtype=np.float32))
-
-                if frames < 2:
-                    if 'CA' in line[17:20]:
-                        for i in atom_name_list:
-                            if line[17:20] == i[1]:
-                                masses.append(ELEMENT_TO_MASS[i[0]])
-                    else:
-                        masses.append(ELEMENT_TO_MASS[values[-1]])
-        # Calculating the COM of the final frame
-        prev_frame = np.array(prev_frame)
-        cur_frame = np.array(cur_frame)
-        cur_frame = unwrap(cur_frame, prev_frame, cell)
-        masses = np.array(masses)
-        total_mass = np.sum(masses)
-        COMS.append(np.sum(cur_frame.T * masses, axis=1) / total_mass)
-
-    with open(f"{folder}/atom_names_msd.txt", "w") as f:
-        for i in atom_names:
-            f.write(f"{i}\n")
-    xyz = np.array(xyz)
-    xyz = xyz.reshape(len(COMS), len(atom_names), 3)
-    for ind, com in enumerate(COMS):
-        xyz[ind] = xyz[ind] - com
-    xyz = xyz.reshape(-1, 3)
-
-    with open(f"{folder}/xyz_wrapped_msd.txt", "w") as f:
-        for xyz in xyz:
-            f.write(f"{xyz[0]},{xyz[1]},{xyz[2]}\n")
-    with open(f"{folder}/frame_count.txt", "w") as f:
-        f.write(f"{frames-1}")  # This frames-1 might be completely unnecessary actually
-
-    simu_time = (frames - 1) * save_interval / 1000
-    print(
-        f"{frames} MSD frames have been saved at {folder}, simulation time {simu_time}"
-    )
-    return frames - 1, simu_time, repeat_units
 
 #this isn't functional yet, kyujong also needs to confirm that analysis is valid for taking the frame in our intervals
 def get_coords_PDB_coordinating_atoms(
@@ -1019,11 +1105,17 @@ def plot_calc_diffu(
     solv_name=[],
     poly_name: list = [],
     atom_names_list: list = [],
-    anion_solv_atoms = 1, #ratio of cation to anion atoms in atom_names_list
 ):
     """
     save_freq - ps
     """
+    print("DEBUG: Unique atom names found in trajectory:")
+    print(set(atom_names))
+    print("DEBUG: Cation names being searched:", cat_name)
+    print("DEBUG: Anion names being searched:", ani_name)
+    print("DEBUG: Polymer names being searched:", poly_name)
+    print("DEBUG: Solvent names being searched:", solv_name)
+
 
     cat_idxs_list = [
         [ind for ind, i in enumerate(atom_names) if i == cat] for cat in cat_name
@@ -1062,7 +1154,7 @@ def plot_calc_diffu(
     cat_color = ["darkorange", "saddlebrown", "darkred"]
     ani_color = ["blue", "navy", "darkviolet"]
     solv_color = ["dimgrey", "darkgrey", "silver"]
-    poly_color = ["forestgreen", "lime", "yellowgreen", "palegreen", "mediumaquamarine"]
+    poly_color = ["forestgreen", "green", "darkolivegreen"]
     #####################################
     # Cation
     # zero origin
@@ -1078,7 +1170,9 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, cat_idxs] - start_cat
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
+        for origin in tqdm(
+            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
+        ):
             start_cat = xyz[origin, cat_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, cat_idxs] - start_cat
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1151,7 +1245,9 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, ani_idxs] - start_ani
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
+        for origin in tqdm(
+            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
+        ):
             start_ani = xyz[origin, ani_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, ani_idxs] - start_ani
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1215,7 +1311,9 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, solv_idxs] - start_solv
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
+        for origin in tqdm(
+            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
+        ):
             start_solv = xyz[origin, solv_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, solv_idxs] - start_solv
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1257,8 +1355,6 @@ def plot_calc_diffu(
     D_poly_err_list = []
     m_poly_loglog = []
     for ind, poly_idxs in enumerate(poly_idxs_list):
-        if len(poly_idxs) == 0:
-            continue
         start_poly = xyz[0, poly_idxs]
         displ_vec = xyz[:, poly_idxs] - start_poly
         MSDs = np.power(displ_vec, 2).sum(axis=2)
@@ -1267,7 +1363,9 @@ def plot_calc_diffu(
         displ_vec = xyz[: num_frames // 2, poly_idxs] - start_poly
         MSDs = [np.power(displ_vec, 2).sum(axis=2)]
         # other origins
-        for origin in np.arange(multi_origin_step, num_frames // 2, multi_origin_step):
+        for origin in tqdm(
+            np.arange(multi_origin_step, num_frames // 2, multi_origin_step)
+        ):
             poly_solv = xyz[origin, poly_idxs]
             displ_vec = xyz[origin : origin + num_frames // 2, poly_idxs] - poly_solv
             this_SD = np.power(displ_vec, 2).sum(axis=2)
@@ -1331,7 +1429,8 @@ def plot_calc_diffu(
     ax.set_xlabel("$t$ / ns", fontsize=labelsize)
     ax.set_ylabel("MSD($t$) / \AA$^2$", fontsize=labelsize)
     if not name:
-        title_name = f"T{int(temperature)}"
+        name = "_".join(folder.split("/")[-3].split("_")[:6])
+        title_name = f"{name}, T{int(temperature)}"
     else:
         title_name = f"{name}, T{int(temperature)}"
     ax.set_title(f"{title_name}", fontsize=titelsize)
@@ -1365,7 +1464,7 @@ def plot_calc_diffu(
             f.write(
                 f"diffusivity of {ani_name[i]} is {D_ani}, with this many ions: {len(ani_idxs_list[i]), 'with linearity:', {m_ani_loglog[i]}}\n"
             )
-            conductivity += D_ani * len(ani_idxs_list[i])/anion_solv_atoms
+            conductivity += D_ani * len(ani_idxs_list[i])
         for i, D_solv in enumerate(D_solv_list):
             print(
                 "diffusivity of",
@@ -1424,6 +1523,7 @@ def plot_calc_diffu(
     plt.show()
     plt.close()
     print("getting population matrix:")
+    print(f"atom_names_list being inserted {atom_names_list}")
     all_mol = get_molecule_population_matrix(
         folder=folder,
         xyz=xyz,
@@ -1431,7 +1531,6 @@ def plot_calc_diffu(
         atom_names=atom_names,
         atom_names_list=atom_names_list,
         cutoff=3.25,
-        anion_solv_atoms=anion_solv_atoms,
     )
 
     plot_clusters_cond(
@@ -1517,8 +1616,9 @@ def plot_clusters_cond(
         ax.set_yticks(np.arange(max_amount + 1))
         ax.set_yticklabels(np.arange(max_amount + 1)[::-1])
         ax.tick_params(axis="both", labelsize=int(2 * labelsize / 3))
+        plot_name = "_".join(folder.split("/")[-3].split("_")[:6])
         ax.set_title(
-            f"Cluster pop at {name} of simu, T={temperature}",
+            f"Cluster pop at {name} of simu, {plot_name}, T={temperature}",
             fontsize=int(2 * labelsize / 3),
         )
         plt.tight_layout()
@@ -1529,11 +1629,7 @@ def plot_clusters_cond(
         plt.close()
 
         # this part writes the amount of clusters with neutral, positive or negative charge
-        imshow_matr = imshow_matr[::-1, :]
-        total_count = 0
-        for i in range(imshow_matr.shape[0]):
-            for j in range(imshow_matr.shape[1]):
-                total_count += imshow_matr[i,j]*(i+j)
+        numbers_clusters = np.sum(imshow_matr)
 
         freelithium_occur = 0
         neutral_occur = 0
@@ -1541,19 +1637,18 @@ def plot_clusters_cond(
         negative_occur = 0
         freetfsi_occur = 0
         for i in range(imshow_matr.shape[0]):
+            t = imshow_matr.shape[0] - 1 - i
             for j in range(imshow_matr.shape[1]):
-                if j == 0 and i > j:
-                    freelithium_occur += imshow_matr[i][j]*i / total_count
-                elif i == 0 and j > i:
-                    freetfsi_occur += imshow_matr[i][j]*j / total_count
-                elif i > j:
-                    positive_occur += (imshow_matr[i][j]*(i-j)) / total_count
-                    neutral_occur += (imshow_matr[i][j]*(2*j)) / total_count
-                elif i == j:
-                    neutral_occur += (imshow_matr[i][j]*(i+j)) / total_count
-                elif j > i:
-                    negative_occur += (imshow_matr[i][j]*(j-i)) / total_count
-                    neutral_occur += (imshow_matr[i][j]*(2*i)) / total_count
+                if j == 0 and t > j:
+                    freelithium_occur += imshow_matr[i][j] / numbers_clusters
+                elif t == 0 and j > t:
+                    freetfsi_occur += imshow_matr[i][j] / numbers_clusters
+                elif t > j:
+                    positive_occur += imshow_matr[i][j] / numbers_clusters
+                elif t == j:
+                    neutral_occur += imshow_matr[i][j] / numbers_clusters
+                elif j > t:
+                    negative_occur += imshow_matr[i][j] / numbers_clusters
         neutral_clusters.append(neutral_occur)
         positive_clusters.append(positive_occur)
         negative_clusters.append(negative_occur)
@@ -1562,7 +1657,7 @@ def plot_clusters_cond(
 
         doubSum, alphasum, numerator = 0, 0, 0
         volume = np.prod((cell.diagonal() * 1e-10))
-        for ncat, cur_cat in enumerate(imshow_matr):
+        for ncat, cur_cat in enumerate(imshow_matr[::-1]):
             for nani, cur_pop in enumerate(cur_cat):
                 D_ij = 0
                 z_ij = ncat - nani
@@ -1611,11 +1706,7 @@ def plot_calc_rdf(
     plot_names: list = None,
 ):
     coord_numbers = []
-
-    duration = names[0].split("_")[-1]
-    with open(f"{folder}/coord_vals_{duration}.txt", "w") as f:
-        f.write("names,coordination_number\n")
-
+    save_names = []
     for i, two_name in enumerate(two_names):
         figsize = (6, 5)
         fig_scalingfactor = figsize[1] / 5
@@ -1658,7 +1749,7 @@ def plot_calc_rdf(
         cell_lengths = np.array([cell[0, 0], cell[1, 1], cell[2, 2]])
         idxs = np.array(list(itertools.product(idxs_one, idxs_two)))
         dist_mat = np.zeros(shape=(num_frames, idxs.shape[0]), dtype=np.float32)
-        for ii, idx in enumerate(idxs):
+        for ii, idx in enumerate(tqdm(idxs)):
             if idx[0] == idx[1]:
                 dist_mat[:, ii] = 1e10
                 continue
@@ -1679,9 +1770,10 @@ def plot_calc_rdf(
         center_val = centers[min_idx]
         coord_val = coord[min_idx]
         coord_numbers.append(coord_val)
-
-        with open(f"{folder}/coord_vals_{duration}.txt", "a") as f:
-            f.write(f"{names[i]},{coord_val}\n")
+        if names:
+            save_names.append(names[i])
+        else:
+            save_names.append("_".join(two_name))
 
         axs.plot(centers, gr, linewidth=3, label=r"$g(r)$", color="blue")
 
@@ -1701,7 +1793,8 @@ def plot_calc_rdf(
         axs.set_ylim([0, gr.max() * 1.1])
 
         if not plot_names:
-            title_name = f"T{int(temperature)}, {names[i]}"
+            temp_name = "_".join(folder.split("/")[-3].split("_")[:6])
+            title_name = f"{temp_name}, T{int(temperature)}, {names[i]}"
         else:
             title_name = f"{plot_names[i]}, T{int(temperature)}, {names[i]}"
         axs.set_title(f"{title_name}", fontsize=titelsize)
@@ -1753,6 +1846,12 @@ def plot_calc_rdf(
             plt.savefig(f"{folder}/RDF_{i}.png", dpi=dpi)
         plt.show()
 
+    if folder:
+        duration = names[0].split("_")[-1]
+        with open(f"{folder}/coord_vals_{duration}.txt", "w") as f:
+            f.write("names,coordination_number\n")
+            for name, coord in zip(names, coord_numbers):
+                f.write(f"{name},{coord},\n")
 
 
 def plot_calc_corr(
@@ -2054,7 +2153,8 @@ def plot_calc_corr(
         )
 
         if not name:
-            title_name = f"T{int(temperature)}"
+            name = folder.split("/")[-1]
+            title_name = f"{name}, T{int(temperature)}"
         else:
             title_name = f"{name}, T{int(temperature)}"
         fig.suptitle(f"{title_name}", fontsize=titelsize)
@@ -2178,7 +2278,6 @@ def compute_fft_onsager(complete_disp_matrix):
     displacements_final_diffusion_ions = complete_disp_matrix.transpose(1, 0, 2)
     dt_indices = np.arange(0, n_dt)
     msd_matrix = []
-
     for i in tqdm(range(n_ions)):
         msd_by_pairs = np.empty([0, n_dt])  # Shape of n_pairs * n_dt
         # print(f"working on column {i}th")

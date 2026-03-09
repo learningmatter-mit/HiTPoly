@@ -39,15 +39,16 @@ def run(
     poly_name: list = None,
     repeat_units=None,
 ):
-    folder = f"{folder}/results"
     pre_folder = folder
+    folder = f"{folder}/results"
 
     cat_names = []
     for ind, i in enumerate(cat_name):
         cat_names.append([i, "CA" + str(ind + 1)])
     ani_names = []
+    ##change AN to P for singleion
     for ind, i in enumerate(ani_name):
-        ani_names.append([i, "AN" + str(ind + 1)])
+        ani_names.append([i, "P" + str(ind + 1)])
     if poly_name:
         poly_names = []
         for ind, i in enumerate(poly_name):
@@ -59,30 +60,21 @@ def run(
     print("folder:", folder)
     cell = save_gromacs_params(folder)
 
-    if not os.path.exists(f"{folder}/xyz_wrapped_msd.txt"):
-        frame_count, simu_time, repeat_units = get_coords_PDB_msd(
-            folder,
-            pre_folder,
-            atom_name_list,
-            save_interval=save_freq,
-            cell=cell,
-            repeat_units=repeat_units,
-        )
-    else:
-        with open(f"{folder}/frame_count.txt", "r") as f:
-            frame_count = int(f.readlines()[0])
-        simu_time = (frame_count - 1) * save_freq / 1000
-        print("MSD coords and atom names already exists!")
+    frame_count, simu_time, repeat_units = get_coords_PDB_msd(
+        folder,
+        pre_folder,
+        atom_name_list,
+        save_interval=save_freq,
+        cell=cell,
+        repeat_units=repeat_units,
+    )
 
     if rdf:
-        if not os.path.exists(f"{folder}/xyz_wrapped_rdf_end.txt"):
-            get_coords_PDB_rdf_openmm(
-                folder=folder,
-                frame_count=frame_count,
-                save_interval=save_freq,
-            )
-        else:
-            print("RDF coords and atom names already exists!")
+        get_coords_PDB_rdf_openmm(
+            folder=folder,
+            frame_count=frame_count,
+            save_interval=save_freq,
+        )
 
     xyz_msd, atom_names_msd, atom_names_long_msd = read_xyz(
         folder, "atom_names_msd.txt", "xyz_wrapped_msd.txt"
@@ -96,7 +88,7 @@ def run(
     # the diffusivity is calculated from the same atoms and as such we need to correct for the overcounting.
     num_an = sum("AN" in name for name in atom_names_long_msd)
     num_ca = sum("CA" in name for name in atom_names_long_msd)
-    if num_an != num_ca:
+    if num_an > num_ca:
         if cat_name == "Zn":
             anion_solv_atoms = int(num_an/num_ca)/2
         else:
@@ -135,17 +127,18 @@ def run(
 
     atom_names_long_msd = [i for i in atom_names_long_msd_filtered if "PL" not in i]
 
-    plot_calc_corr(
-        xyz=xyz_msd_corr,
-        folder=folder,
-        save_freq=save_freq,
-        cat_name=[i[0] + "-" + i[1] for i in cat_names],
-        ani_name=[i[0] + "-" + i[1] for i in ani_names],
-        cell=cell,
-        temperature=temperature,
-        atom_names=atom_names_long_msd,
-        name=name,
-    )
+##skipping
+    # plot_calc_corr(
+    #     xyz=xyz_msd_corr,
+    #     folder=folder,
+    #     save_freq=save_freq,
+    #     cat_name=[i[0] + "-" + i[1] for i in cat_names],
+    #     ani_name=[i[0] + "-" + i[1] for i in ani_names],
+    #     cell=cell,
+    #     temperature=temperature,
+    #     atom_names=atom_names_long_msd,
+    #     name=name,
+    # )
 
     ### TODO: RDF analysis currently works only for one cation and one anion
     one_name = [f"{cat_name[0]}-CA1"]

@@ -30,3 +30,11 @@ class hitpolyArgs(Tap):
     True - training using discrete atom types to directly optimize parameters (adapted from AuTopology)
     False - training using atomic embeddings to predict parameters (learn weights of parameter prediction)
     """
+
+    discrete_neighborhood_depth: int = 3
+    """
+    The number of nearest neighbor convolutions used to determine discrete atomic environments based on
+    message passing
+    """
+
+    init_params: bool = False
