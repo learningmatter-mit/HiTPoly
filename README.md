@@ -4,42 +4,54 @@ A platform for setting up high throughput polymer electrolyte MD simulations.
 
 ## Installation
 
-You can install HiTPoly directly from the source code:
+`HiTPoly` is distributed as a Python package named `hitpoly` and requires Python `>=3.6`.
+
+We recommend installing it in a dedicated `conda` environment named `hitpoly`:
 
 ```bash
 # Clone the repository
 git clone https://github.com/learningmatter-mit/HiTPoly.git
 cd HiTPoly
 
-# Install in editable mode
+# Create and activate a dedicated conda environment
+conda create -n hitpoly python=3.10 -y
+conda activate hitpoly
+
+# Install HiTPoly from the local source tree
+pip install .
+```
+
+If you plan to actively develop the package, install it in editable mode instead:
+
+```bash
 pip install -e .
 ```
 
-All required dependencies (including numpy, pandas, scipy, torch, rdkit, openmm, etc.) will be automatically installed.
+This installation pulls in the Python dependencies declared in `pyproject.toml`.
 
-## Dependencies
+## Python Dependencies
 
-The following main dependencies will be automatically installed:
+The main Python dependencies installed with `pip install .` are:
 
-- numpy
-- pandas
-- scipy
-- PyTorch
-- RDKit
-- OpenMM
-- matplotlib
-- typing-extensions
-- typed-argument-parser
+- `numpy>=1.20.0`
+- `pandas`
+- `scipy`
+- `torch`
+- `rdkit`
+- `matplotlib`
+- `typing-extensions`
+- `typed-argument-parser`
+- `scikit-learn`
 
-## Requirements
+## External Requirements
 
-To run HiTPoly, you need to:
+To run HiTPoly, you also need to install the following external tools separately:
 
-1. Download and install LigParGen locally on your machine following the tutorial [here](https://github.com/learningmatter-mit/ligpargen)
+1. Download and install LigParGen locally on your machine following the tutorial [here](https://github.com/learningmatter-mit/ligpargen/)
 2. Install Packmol on your workstation, [LINK](https://m3g.github.io/packmol/)
 3. Install OpenBabel on your workstation `conda install openbabel -c openbabel`
 
-HiTPoly can run simulations and interface either with Gromacs or OpenMM.
+HiTPoly can run simulations and interface with either Gromacs or OpenMM. These MD engines are not installed automatically by `pip install .`.
 
 ## Installation of MD Engines
 
