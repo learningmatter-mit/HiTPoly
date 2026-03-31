@@ -18,6 +18,12 @@ import sys
 sys.setrecursionlimit(5000)
 
 
+def normalize_input_path(path: str):
+    if not path:
+        return path
+    return os.path.normpath(os.path.expanduser(path))
+
+
 def run(
     save_path: str,
     results_path: str,
@@ -38,12 +44,15 @@ def run(
     platform:str='local',
     polymer_chain_length:int=None,
     simu_type="conductivity",
-    htvs_env='htvs',
+    hitpoly_env='hitpoly',
 ):
     """Run the MD simulation."""
     cuda_device = "0"
+    save_path = normalize_input_path(save_path)
+    results_path = normalize_input_path(results_path)
 
     packmol_path = os.environ["packmol"]
+    hitpoly_path = normalize_input_path(hitpoly_path)
     if not hitpoly_path:
         hitpoly_path = f"{os.path.expanduser('~')}/HiTPoly"
 
@@ -252,7 +261,7 @@ def run(
             ani_name_rdf=ani_name_rdf,
             poly_name=','.join(poly_name),
             hitpoly_path=hitpoly_path,
-            htvs_env=htvs_env,
+            hitpoly_env=hitpoly_env,
             xyz_output=int(md_save_time*timestep),
         )
 
@@ -342,9 +351,9 @@ if __name__ == "__main__":
         default="conductivity",
     )
     parser.add_argument(
-        "--htvs_env",
-        help="HTVS environment",
-        default="htvs",
+        "--hitpoly_env",
+        help="HiTPoly environment",
+        default="hitpoly",
     )
     args = parser.parse_args()
 
@@ -400,5 +409,5 @@ if __name__ == "__main__":
         ratios_type=ratios_type,
         hitpoly_path=args.hitpoly_path,
         simu_type=args.simu_type,
-        htvs_env=args.htvs_env,
+        hitpoly_env=args.hitpoly_env,
     )

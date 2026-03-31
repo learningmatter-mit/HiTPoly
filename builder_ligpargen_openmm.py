@@ -21,6 +21,12 @@ import sys
 sys.setrecursionlimit(5000)
 
 
+def normalize_input_path(path: str):
+    if not path:
+        return path
+    return os.path.normpath(os.path.expanduser(path))
+
+
 def run(
     save_path:str,
     results_path:str,
@@ -41,12 +47,15 @@ def run(
     md_save_time:int=12500,
     platform:str='local',
     simu_type:str="conductivity",
-    htvs_env:str='htvs',
+    hitpoly_env:str='hitpoly',
 ):
 
     # don't forget to export the path to your packmol in the bashrc
     cuda_device = "0"
+    save_path = normalize_input_path(save_path)
+    results_path = normalize_input_path(results_path)
     packmol_path = os.environ["packmol"]
+    hitpoly_path = normalize_input_path(hitpoly_path)
     if not hitpoly_path:
         hitpoly_path = f"{os.path.expanduser('~')}/HiTPoly"
 
@@ -165,6 +174,8 @@ def run(
         box_multiplier = 10
     elif system == "polymer":
         box_multiplier = 1
+    else:
+        raise ValueError("System must be either gel, liquid or polymer")
 
     create_box_and_ff_files_openmm(
         save_path=save_path,
@@ -191,11 +202,6 @@ def run(
     final_save_path = f"{save_path}/openmm_saver"
     if not os.path.isdir(final_save_path):
         os.makedirs(final_save_path)
-
-    equilibrate_system_1(
-        save_path=save_path,
-        final_save_path=final_save_path,
-    )
 
     if system == "polymer" or system == "gel":
         equilibrate_system_1(
@@ -246,7 +252,7 @@ def run(
             ani_name_rdf=ani_name_rdf,
             poly_name=','.join(smiles),
             hitpoly_path=hitpoly_path,
-            htvs_env=htvs_env,
+            hitpoly_env=hitpoly_env,
             xyz_output=int(md_save_time*timestep),
         )
 
@@ -334,9 +340,9 @@ if __name__ == "__main__":
         default="conductivity",
     )
     parser.add_argument(
-        "--htvs_env",
-        help="HTVS environment",
-        default="htvs",
+        "--hitpoly_env",
+        help="HiTPoly analysis environment",
+        default="hitpoly",
     )
     parser.add_argument(
         "--add_end_Cs",
@@ -362,7 +368,7 @@ if __name__ == "__main__":
             for line in lines:
                 smiles.append(line.strip())
     else:
-        smiles = args.smiles_path
+        smiles = [args.smiles_path]
 
     solvent_count = args.solvent_count.split(",")
     solvent_count = [int(i) for i in solvent_count]
@@ -388,5 +394,5 @@ if __name__ == "__main__":
         md_save_time=int(args.md_save_time),
         platform=args.platform,
         simu_type=args.simu_type,
-        htvs_env=args.htvs_env,
+        hitpoly_env=args.hitpoly_env,
     )

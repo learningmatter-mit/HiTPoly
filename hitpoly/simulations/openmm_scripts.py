@@ -1307,7 +1307,7 @@ def write_analysis_script(
     xyz_output=20,  # ps
     ani_name_rdf="None",
     poly_name="None",
-    htvs_env='htvs',
+    hitpoly_env='hitpoly',
 ):
     if platform == "supercloud":
         with open(f"{results_path}/run_analysis.sh", "w") as f:
@@ -1322,7 +1322,7 @@ def write_analysis_script(
             f.write("# Load modules" + "\n")
             f.write("source /etc/profile" + "\n")
             f.write("source /home/gridsan/$USER/.bashrc" + "\n")
-            f.write(f"source activate {htvs_env}" + "\n")
+            f.write(f"source activate {hitpoly_env}" + "\n")
             f.write("\n")
             f.write(f"export HiTPoly={hitpoly_path}" + "\n")
             f.write(f"export DATA_PATH={results_path}" + "\n")
@@ -1341,7 +1341,7 @@ def write_analysis_script(
             f.write("# Load modules" + "\n")
             f.write("source /etc/profile" + "\n")
             f.write("source /home/$USER/.bashrc" + "\n")
-            f.write(f"source activate {htvs_env}" + "\n")
+            f.write(f"source activate {hitpoly_env}" + "\n")
             f.write("\n")
             f.write(f"export HiTPoly={hitpoly_path}" + "\n")
             f.write(f"export DATA_PATH={results_path}" + "\n")
