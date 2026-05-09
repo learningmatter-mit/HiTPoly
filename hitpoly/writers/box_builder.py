@@ -910,7 +910,7 @@ def assign_lpg_params(
                 charges_dict[key] = np.array(val).mean()
         elif charges == "LIT":
             charges_list = []
-            with open(f"{lit_charges_save_path}/LIT_charges/PEO.csv", "r") as f:
+            with open(lit_charges_save_path, "r") as f:
                 lines = f.readlines()
                 try:
                     for i, a in zip(lines, atoms_short[ind_dataset]):
