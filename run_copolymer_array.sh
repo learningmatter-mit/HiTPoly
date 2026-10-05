@@ -23,6 +23,6 @@ exec > "$RESULTS/logs/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.out" 2>&1
 
 source /etc/profile
 source "$HOME/.bashrc"
-conda activate htvs
+source activate htvs
 
 python -u "$HITPOLY_DIR/run_copolymer.py" --csv "$CSV" --row "$SLURM_ARRAY_TASK_ID" --results "$RESULTS"
