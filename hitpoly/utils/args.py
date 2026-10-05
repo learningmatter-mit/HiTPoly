@@ -36,3 +36,8 @@ class hitpolyArgs(Tap):
     The number of nearest neighbor convolutions used to determine discrete atomic environments based on
     message passing
     """
+
+    init_params: bool = False
+    """
+    If True, TopologyDataset initializes the discrete parameters (only used for training)
+    """
