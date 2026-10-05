@@ -6,6 +6,7 @@ chains are typed jointly with the oligomers (same TopologyDataset) so atom-type 
 and their parameters come from the oligomers through those shared IDs.
 """
 import os
+import shutil
 import subprocess
 import time
 
@@ -44,8 +45,18 @@ def write_ligpargen_mol(smiles, mol_path):
 
 
 def submit_supercloud_ligpargen(ligpargen_path, mol_filename, output_prefix):
-    """Submit LigParGen (podman container) as its own CPU job. Returns the SLURM job id."""
-    script = os.path.join(ligpargen_path, f"run_{output_prefix}.sh")
+    """
+    Submit LigParGen (podman container) as its own CPU job and return the SLURM job id.
+
+    LigParGen/BOSS writes fixed-name scratch files (optzmat, out, log, plt.pdb, ...) in its
+    working directory, so each oligomer runs in its own subfolder (with its own podman
+    storage) and only <prefix>.xml is moved up into ligpargen_path when it is complete.
+    """
+    workdir = os.path.join(ligpargen_path, output_prefix)
+    os.makedirs(workdir, exist_ok=True)
+    mol_basename = os.path.basename(mol_filename)
+    shutil.copy(mol_filename, os.path.join(workdir, mol_basename))
+    script = os.path.join(workdir, f"run_{output_prefix}.sh")
     with open(script, "w") as f:
         f.write("\n".join([
             "#!/bin/bash",
@@ -55,13 +66,17 @@ def submit_supercloud_ligpargen(ligpargen_path, mol_filename, output_prefix):
             "#SBATCH --ntasks-per-node=1",
             "#SBATCH --cpus-per-task=1",
             "#SBATCH --time=2:00:00",
-            f"#SBATCH --output={ligpargen_path}/slurm_{output_prefix}_%j.out",
+            f"#SBATCH --output={workdir}/slurm_%j.out",
             "",
-            f"cd {ligpargen_path}",
-            "export XDG_DATA_HOME=/state/partition1/user/$(id -un)",
+            f"cd {workdir}",
+            "export XDG_DATA_HOME=/state/partition1/user/$(id -un)/podman_$SLURM_JOB_ID",
+            "mkdir -p $XDG_DATA_HOME",
             "podman load -i $HOME/containers/ligpargen.tar",
             "podman run --rm -w /app/RUN -v .:/app/RUN:Z ligpargen:latest python ../LigParGen/Converter.py "
-            f"-m {os.path.basename(mol_filename)} -o 0 -c 0 -r {output_prefix} -d . -l",
+            f"-m {mol_basename} -o 0 -c 0 -r {output_prefix} -d . -l",
+            "podman unshare rm -rf $XDG_DATA_HOME 2>/dev/null || rm -rf $XDG_DATA_HOME",
+            f"if [ -s {output_prefix}.xml ]; then cp {output_prefix}.xml ../.{output_prefix}.xml.tmp "
+            f"&& mv ../.{output_prefix}.xml.tmp ../{output_prefix}.xml; fi",
             "",
         ]))
     out = subprocess.run(["sbatch", "--parsable", script], capture_output=True, text=True)
@@ -91,7 +106,7 @@ def wait_for_ligpargen(xml_paths_by_job, timeout=LIGPARGEN_TIMEOUT_S, poll=30):
                 if not os.path.exists(xml):
                     raise RuntimeError(
                         f"LigParGen job {job_id} finished without writing {xml}; "
-                        f"see the slurm_*_{job_id}.out log in {os.path.dirname(xml)}."
+                        f"see slurm_{job_id}.out in {xml[:-4]}/."
                     )
                 pending.pop(job_id)
         if pending:
