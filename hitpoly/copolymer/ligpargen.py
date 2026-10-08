@@ -72,13 +72,23 @@ def submit_supercloud_ligpargen(ligpargen_path, mol_filename, output_prefix):
             "export XDG_DATA_HOME=/state/partition1/user/$(id -un)/podman_$SLURM_JOB_ID",
             "mkdir -p $XDG_DATA_HOME",
             "podman load -i $HOME/containers/ligpargen.tar",
-            # On some nodes the container finishes but never exits; the timeout stops it, and
-            # the XML is moved up before cleanup (which can hang the same way) as long as it is complete.
-            "timeout 30m podman run --rm -w /app/RUN -v .:/app/RUN:Z ligpargen:latest python ../LigParGen/Converter.py "
-            f"-m {mol_basename} -o 0 -c 0 -r {output_prefix} -d . -l",
-            f"if grep -q '</ForceField>' {output_prefix}.xml 2>/dev/null; then cp {output_prefix}.xml ../.{output_prefix}.xml.tmp "
-            f"&& mv ../.{output_prefix}.xml.tmp ../{output_prefix}.xml; fi",
-            "timeout 5m podman unshare rm -rf $XDG_DATA_HOME 2>/dev/null || rm -rf $XDG_DATA_HOME",
+            # On some nodes the container finishes but never exits, and neither SIGTERM nor the
+            # job time limit gets it out cleanly. So run it in the background, copy the XML as
+            # soon as LigParGen's last output (.cms, Desmond) is written, then kill it.
+            "podman run --rm -w /app/RUN -v .:/app/RUN:Z ligpargen:latest python ../LigParGen/Converter.py "
+            f"-m {mol_basename} -o 0 -c 0 -r {output_prefix} -d . -l &",
+            "PODMAN_PID=$!",
+            f"copy_xml() {{ grep -q '</ForceField>' {output_prefix}.xml 2>/dev/null && "
+            f"cp {output_prefix}.xml ../.{output_prefix}.xml.tmp && mv ../.{output_prefix}.xml.tmp ../{output_prefix}.xml; }}",
+            "for i in $(seq 360); do",
+            f"  if [ -s {output_prefix}.cms ] && grep -q '</ForceField>' {output_prefix}.xml 2>/dev/null; then sleep 10; break; fi",
+            "  kill -0 $PODMAN_PID 2>/dev/null || break",
+            "  sleep 5",
+            "done",
+            "copy_xml",
+            "kill -9 $PODMAN_PID 2>/dev/null",
+            "(timeout -k 10 120 podman unshare rm -rf $XDG_DATA_HOME >/dev/null 2>&1 &)",
+            f"[ -f ../{output_prefix}.xml ] && exit 0 || exit 1",
             "",
         ]))
     out = subprocess.run(["sbatch", "--parsable", script], capture_output=True, text=True)
