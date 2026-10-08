@@ -21,6 +21,7 @@ import glob
 import json
 import os
 import random
+import shutil
 import tempfile
 import time
 import traceback
@@ -416,6 +417,11 @@ def run_simulation(build):
         equilibrate_system_2(save_path=save_path, final_save_path=final_save_path)
         prod_run_nvt(save_path=save_path, final_save_path=final_save_path,
                      simu_temp=st["simu_temp"], simu_time=st["simu_length"])
+        # run_analysis_openmm.py reads the trajectory from <box>/results/.
+        results = os.path.join(save_path, "results")
+        os.makedirs(results, exist_ok=True)
+        if os.path.exists(os.path.join(save_path, "simu_output.pdb")):
+            shutil.move(os.path.join(save_path, "simu_output.pdb"), os.path.join(results, "simu_output.pdb"))
         repeats = build.get("repeats")
         write_analysis_script(
             save_path=save_path, results_path=save_path,
