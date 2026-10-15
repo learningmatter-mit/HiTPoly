@@ -1,4 +1,5 @@
 import pickle as pkl
+import shutil
 import pandas as pd
 from pymatgen.io.ase import AseAtomsAdaptor
 from scipy.spatial import ConvexHull
@@ -12,7 +13,8 @@ import matplotlib
 import matplotlib.colors as mcolors
 
 
-plt.rc("text", usetex=True)
+# Perlmutter compute nodes have no latex binary; mathtext renders these labels fine.
+plt.rc("text", usetex=shutil.which("latex") is not None)
 plt.rc("font", family="serif")
 
 matplotlib.rcParams["pdf.fonttype"] = 42
@@ -41,7 +43,9 @@ def get_structure_list(atom_names_rdf, xyz_rdf, box_dim, res_id, cubic_box=True)
                 species=atom_names_rdf,
                 coords=xyz_rdf[i],
                 coords_are_cartesian=True,
-                labels=res_id,
+                # The labels= kwarg only exists in newer pymatgen; as a site property
+                # it still surfaces as .label on sites and their neighbours.
+                site_properties={"label": res_id},
             )
         )
     return structure_list
@@ -136,7 +140,10 @@ def return_atomtypes_numberneighbors(data):
             num_neighbors = len(data[i][j]["nlist"])
             num_neighs.add(num_neighbors)
             for neighbor in data[i][j]["nlist"]:
-                label_prefix = neighbor.label.split(" ")[0]
+                # PDB right-justifies residue names in a 3-char field, so a 2-char
+                # name arrives as " P1". split() (no arg) strips that; split(" ")[0]
+                # and label[:3] do not, and disagreed with each other.
+                label_prefix = neighbor.label.split()[0]
                 # if label_prefix == "AN1":
                 coord_env.add(f"{str(neighbor.specie)}-{label_prefix}")
                 # elif label_prefix == "PL1":
@@ -168,9 +175,12 @@ def make_barplot_coordination_atomtypes(
             for l in range(len(coord_env)):
                 for k in range(len(data[i][j]["nlist"])):
                     if str(data[i][j]["nlist"][k].specie) == coord_env[l].split("-")[0]:
+                        # Must match how coord_env keys were built above, or polymer
+                        # atoms never count and the num_neighs buckets come out empty
+                        # (np.mean of an empty list -> NaN for every atom type).
                         if (
-                            data[i][j]["nlist"][k].label[:3]
-                            == coord_env[l].split("-")[1]
+                            data[i][j]["nlist"][k].label.split()[0]
+                            == coord_env[l].split("-", 1)[1]
                         ):
                             count_env[l] += 1
             for n in num_neighs:
@@ -188,7 +198,10 @@ def make_barplot_coordination_atomtypes(
             poly_solv = []
             anion_solv = []
             for solv in item2['nlist']:
-                if 'PL' in solv.label.split()[0]:
+                # Residues are named AN* (anion), CA* (cation) and the polymer gets
+                # whatever the chain resid is ("P1" here, not "PL"), so test for the
+                # anion rather than guessing the polymer's name.
+                if not solv.label.split()[0].startswith("AN"):
                     poly_solv.append([int(solv.label.split()[1]), solv.nn_distance])
                 else:
                     anion_solv.append([int(solv.label.split()[1]), solv.nn_distance])
@@ -417,10 +430,12 @@ def make_violinplot_distance_coordinationnumber(
         y="distance",
         data=df_violin,
         color="skyblue",
-        linecolor="navy",
-        density_norm="count",
+        # seaborn 0.12 renamed these in 0.13 (density_norm/linecolor/inner_kws) but
+        # swallows unknown kwargs silently, so the 0.13 spelling left the violins
+        # area-normalised instead of scaled by count.
+        scale="count",
         linewidth=1,
-        inner_kws=dict(box_width=3),
+        inner="box",
     )
 
     ax.tick_params(axis="both", which="major", labelsize=labelsize)

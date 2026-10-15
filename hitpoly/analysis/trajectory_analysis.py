@@ -1,4 +1,5 @@
 import os
+import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -21,7 +22,8 @@ FS_TO_NS = 1e-6
 ELEC = 1.60217662 * (1e-19)  # C
 KB = 1.3806452e-23  # J/K
 
-plt.rc("text", usetex=True)
+# Perlmutter compute nodes have no latex binary; mathtext renders these labels fine.
+plt.rc("text", usetex=shutil.which("latex") is not None)
 plt.rc("font", family="serif")
 
 matplotlib.rcParams["pdf.fonttype"] = 42
@@ -78,48 +80,79 @@ def RDF(dists, dx, Na, Nb, V):
     return binc, gr, crd
 
 
-def find_slope1_indeces(timesteps_delTs, total_corr):
-    slope_list = []
-    iteration_window = 15
-    steps_to_skip = len(timesteps_delTs) // 5  # Skip the first 20%
-    for ind, i in enumerate(range(len(timesteps_delTs))):
-        if ind < steps_to_skip or ind > len(timesteps_delTs) - iteration_window:
+def find_slope1_indeces(timesteps_delTs, total_corr, window=None, slope_tol=0.01):
+    """
+    Indices to fit the diffusive regime over, plus that window's log-log slope.
+
+    Searches widest-first and returns the largest window whose slope is within slope_tol
+    of 1, so the fit spans as much data as stays Fickian. If no window qualifies - a
+    trajectory too short to fully reach the linear regime - the tolerance relaxes to the
+    best slope actually attainable, which still prefers the widest window at that
+    linearity over a narrow, locally-linear patch.
+    """
+    t = np.asarray(timesteps_delTs, dtype=float)
+    c = np.asarray(total_corr, dtype=float)
+    n = len(t)
+    steps_to_skip = n // 5  # Skip the first 20%
+    max_w = n - steps_to_skip
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        X = np.log10(np.abs(t))
+        Y = np.log10(np.abs(c))
+    usable = np.isfinite(X) & np.isfinite(Y) & (c != 0)
+    Xf = np.where(usable, X, 0.0)
+    Yf = np.where(usable, Y, 0.0)
+
+    def pre(a):
+        return np.concatenate(([0.0], np.cumsum(a)))
+
+    S1, Sx, Sy = pre(usable.astype(float)), pre(Xf), pre(Yf)
+    Sxx, Sxy = pre(Xf * Xf), pre(Xf * Yf)
+    Spos, Sneg = pre((c > 0).astype(float)), pre((c < 0).astype(float))
+
+    if window:
+        widths = [int(window)]
+    else:
+        widths, w = [], max_w
+        while w >= 15:
+            widths.append(w)
+            w = min(w - 1, int(w * 0.97))
+
+    # Closed-form least-squares slope per window, so every width can be scanned cheaply.
+    best = {}
+    for w in widths:
+        if w < 2 or w > max_w:
             continue
-        # Iterates through windows of lenght {iteration_window}
-        diffu_inx = np.arange(i, i + iteration_window)
-        if np.any(np.round(total_corr[diffu_inx], decimals=8)):
-            if np.all(total_corr[diffu_inx] > 0):
-                popt, pcov = curve_fit(
-                    lin_func,
-                    np.log10(timesteps_delTs[diffu_inx]),
-                    np.log10(total_corr[diffu_inx]),
-                    p0=[0.0, 1.0],
-                )
-            elif np.all(total_corr[diffu_inx] < 0):
-                popt, pcov = curve_fit(
-                    lin_func,
-                    np.log10(timesteps_delTs[diffu_inx]),
-                    np.log10(-1 * total_corr[diffu_inx]),
-                    p0=[0.0, 1.0],
-                )
-            else:
-                print("both pos and negative for loglog, so assign 1e5")
-                slope_list.append(1e5)
-                continue
-        else:
-            popt, pcov = curve_fit(
-                lin_func,
-                np.log10(timesteps_delTs[diffu_inx]),
-                np.zeros_like(total_corr[diffu_inx]),
-                p0=[0.0, 1.0],
-            )
-        slope_list.append(popt[0])
-    slope_val = min(slope_list, key=lambda x: abs(x - 1))
-    slope_ind = slope_list.index(slope_val)
-    diffu_inx = np.arange(
-        slope_ind + steps_to_skip, slope_ind + steps_to_skip + iteration_window
-    )
-    return diffu_inx, slope_list[slope_ind]
+        i = np.arange(steps_to_skip, n - w + 1)
+        if not len(i):
+            continue
+        j = i + w
+        sx, sy = Sx[j] - Sx[i], Sy[j] - Sy[i]
+        sxx, sxy = Sxx[j] - Sxx[i], Sxy[j] - Sxy[i]
+        den = w * sxx - sx * sx
+        with np.errstate(divide="ignore", invalid="ignore"):
+            slope = (w * sxy - sx * sy) / den
+        # A log-log fit only means something where the data is non-zero and single-signed.
+        good = (
+            ((S1[j] - S1[i]) == w)
+            & (((Spos[j] - Spos[i]) == w) | ((Sneg[j] - Sneg[i]) == w))
+            & (den != 0)
+            & np.isfinite(slope)
+        )
+        if not good.any():
+            continue
+        err = np.where(good, np.abs(slope - 1.0), np.inf)
+        k = int(np.argmin(err))
+        best[w] = (float(err[k]), int(i[k]), float(slope[k]))
+
+    if not best:
+        w = min(15, max_w)
+        return np.arange(steps_to_skip, steps_to_skip + w), float("nan")
+
+    tol_eff = max(slope_tol, min(v[0] for v in best.values()) + 0.01)
+    w_sel = max(w for w, v in best.items() if v[0] <= tol_eff)
+    _, i0, slope = best[w_sel]
+    return np.arange(i0, i0 + w_sel), slope
 
 
 def binning_2D(data1, data2, dx1, dx2, density=True):

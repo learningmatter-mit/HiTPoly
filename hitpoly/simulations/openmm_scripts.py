@@ -1353,3 +1353,33 @@ def write_analysis_script(
                 f" -n $NAME -f {xyz_output} -temp {simu_temperature} --platform {platform}"
                 + f" --cat {cation} --ani {anion} --ani_rdf {ani_name_rdf} \n"
             )
+
+    elif platform == "perlmutter":
+        # Hardcode the conda env Python to avoid conda-init issues on compute nodes.
+        conda_root = os.path.expanduser("~/.conda/envs")
+        python_bin = os.path.join(conda_root, hitpoly_env, "bin", "python3")
+        with open(f"{results_path}/run_analysis.sh", "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write("#SBATCH --job-name=copoly_ana\n")
+            f.write("#SBATCH -C cpu\n")
+            f.write("#SBATCH --nodes=1\n")
+            f.write("#SBATCH --ntasks=1\n")
+            f.write("#SBATCH --cpus-per-task=64\n")
+            f.write("#SBATCH --account=m4845\n")
+            f.write("#SBATCH --qos=regular\n")
+            f.write("#SBATCH --time=03:00:00\n")
+            f.write(f"#SBATCH --output={results_path}/analysis.log\n")
+            f.write("\n")
+            f.write("export MPLCONFIGDIR=/tmp/matplotlib_$$\n")
+            f.write(f"export HiTPoly={hitpoly_path}\n")
+            f.write(f"export DATA_PATH={results_path}\n")
+            f.write(f"export NAME=T{simu_temperature}\n")
+            f.write(
+                f"{python_bin} $HiTPoly/run_analysis_openmm.py -p $DATA_PATH"
+                f" -d {int(prod_run_time/2*3/4)}"
+                f" --repeat_units {','.join(str(i) for i in repeat_units)}"
+                f" -n $NAME -f {xyz_output} -temp {simu_temperature}"
+                f" --platform {platform}"
+                f" --cat {cation} --ani {anion}"
+                f" --ani_rdf {ani_name_rdf} --poly {poly_name}\n"
+            )

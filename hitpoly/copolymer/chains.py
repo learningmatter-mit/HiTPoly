@@ -185,6 +185,13 @@ def create_oligomers(smiles, polymerization_mode, arms=3, oligomer_repeats_list=
         labels = ["A", "B", "C"][: len(mols)]
         mapping = {labels[i]: mols[i] for i in range(len(mols))}
         patterns = {"".join(c): [mapping[x] for x in c] for c in itertools.product(labels, repeat=3)}
+        # Add tetramers so that junction atoms (which change neighborhood after orient_monomers_for_junctions)
+        # are seen in an interior context (surrounded by real monomers on both sides, not end-caps).
+        # Trimers like ABA have A at the end capped with C, giving junction atoms a different depth-2
+        # neighborhood than in a long chain. BABA/ABAB put each monomer interior to the other.
+        if len(labels) == 2:
+            for combo in ["ABAB", "BABA", "ABBA", "BAAB"]:
+                patterns[combo] = [mapping[ch] for ch in combo]
 
     elif polymerization_mode == "block":
         # Kept as-is (including the duplicate patterns for 2 monomers) so LigParGen charge
@@ -193,6 +200,10 @@ def create_oligomers(smiles, polymerization_mode, arms=3, oligomer_repeats_list=
             "AAA", "BBB", "CCC", "AAB", "ABB", "BAA", "BBA",
             "AAC", "ACC", "CAA", "CCA", "BBC", "BCC", "CBB", "CCB",
         ]
+        # Add tetramers for the A-run/B-run junction: in a block copolymer the dihedral
+        # spanning the junction needs an A atom whose [Cu] side sees a real B, not a C end-cap.
+        if len(mols) == 2:
+            valid_combos += ["AABB", "BBAA", "ABBA", "BAAB"]
         mapping = {
             "A": mols[0],
             "B": mols[1] if len(mols) > 1 else mols[0],

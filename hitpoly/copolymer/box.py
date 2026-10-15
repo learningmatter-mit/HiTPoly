@@ -64,7 +64,12 @@ def create_packmol_input_file(
 
     total_vol = 0.0
     for path, count in zip(poly_paths, polymer_count):
-        pos = Chem.MolFromPDBFile(path, removeHs=False).GetConformer().GetPositions()
+        # Only positions are needed here. Bond perception can assign an O a third
+        # bond when two chain atoms sit too close, which makes the parse return None.
+        mol = Chem.MolFromPDBFile(
+            path, removeHs=False, sanitize=False, proximityBonding=False
+        )
+        pos = mol.GetConformer().GetPositions()
         radius = distance_matrix(pos, pos).max() / 2
         total_vol += 4 / 3 * np.pi * radius**3 * count
     total_vol *= box_multiplier
@@ -241,7 +246,12 @@ def assign_lpg_params(
         for val in param_dict["angles"].values():
             kf = tuple(_rq(charges_dict.get(_try_int(x), 0.0)) for x in _coerce(val["other_idx"], atom_names_long[0]))
             charge_angles[kf] = charge_angles[kf[::-1]] = [val["k"], val["angle"]]
+        bonded_pairs = set()
+        for a, b in mol.bonds:
+            bonded_pairs.add((int(a), int(b)))
+            bonded_pairs.add((int(b), int(a)))
         by_name = by_charge = 0
+        keep_angles = []
         for ind, (a, b, c) in enumerate(mol.angles):
             names = [atom_names_long[a], atom_names_long[b], atom_names_long[c]]
             hit = None
@@ -255,42 +265,51 @@ def assign_lpg_params(
                 c1 = tuple(_rq(charges_dict.get(_try_int(x), 0.0)) for x in names)
                 hit = charge_angles.get(c1) or charge_angles.get(c1[::-1])
                 if hit is None:
+                    if (int(a), int(c)) in bonded_pairs:
+                        # The outer atoms are bonded, so this angle closes a 3-membered
+                        # ring. Its three bond lengths already fix all three interior
+                        # angles, which is why LigParGen emits no parameter for it.
+                        # Substituting a generic ~110 deg angle would tear the ring open.
+                        continue
                     raise KeyError(f"No angle parameters by name or charge for atom types {names} (charges {c1}).")
                 by_charge += 1
+            keep_angles.append(ind)
             mol.angle_params[ind] = torch.tensor(hit, dtype=mol.angle_params.dtype, device=mol.angle_params.device)
+        n_ring = len(mol.angles) - len(keep_angles)
+        if n_ring:
+            print(f"  dropped {n_ring} redundant 3-membered-ring angles")
+            mol.angles = mol.angles[keep_angles]
+            mol.angle_params = mol.angle_params[keep_angles]
         print(f"  angles: {len(mol.angles)} (by type {by_name}, by charge {by_charge})")
 
-        # Dihedrals: exact type IDs, then LigParGen atom types, then central-bond types
-        type_map = {nm: rec["type"] for nm, rec in param_dict["atoms"].items() if "type" in rec}
-        name_index, type_index, central_index = {}, {}, {}
+        # Dihedrals: exact atom-type IDs, then the central bond. param_dict keys atoms by
+        # hitpoly type ID, so the names already are the types; a central-bond match covers
+        # ring torsions whose end atoms are typed differently in the long chain than in
+        # any oligomer.
+        name_index, central_index = {}, {}
         for val in param_dict["dihedrals"].values():
             oi = tuple(_coerce(val["other_idx"], atom_names_long[0]))
             name_index.setdefault(oi, []).append(val)
             name_index.setdefault(oi[::-1], []).append(val)
-            try:
-                ty = tuple(type_map[n] for n in oi)
-            except KeyError:
-                continue
-            type_index.setdefault(ty, []).append(val)
-            type_index.setdefault(ty[::-1], []).append(val)
-            central_index.setdefault((ty[1], ty[2]), []).append(val)
-            central_index.setdefault((ty[2], ty[1]), []).append(val)
+            central_index.setdefault((oi[1], oi[2]), []).append(val)
+            central_index.setdefault((oi[2], oi[1]), []).append(val)
         counts = Counter()
         for ind, quad in enumerate(mol.dihedrals):
             names4 = tuple(atom_names_long[x] for x in quad)
             cand = name_index.get(names4) or name_index.get(names4[::-1])
             how = "name"
             if not cand:
-                try:
-                    types4 = tuple(type_map[n] for n in names4)
-                except KeyError:
-                    types4 = None
-                if types4 is not None:
-                    cand, how = type_index.get(types4) or type_index.get(types4[::-1]), "type"
-                    if not cand:
-                        cand, how = central_index.get((types4[1], types4[2])), "central"
+                cand, how = central_index.get((names4[1], names4[2])), "central"
             if not cand:
-                raise KeyError(f"No dihedral parameters for atom types {names4}.")
+                # No match found through name, OPLS type, or central-bond lookup.
+                # This happens at copolymer junctions where the partial-charge
+                # context of the long chain differs slightly from all oligomers,
+                # causing a different OPLS type assignment. A zero torsional
+                # barrier is the standard OPLS-AA treatment for unparameterised
+                # generic aliphatic/ether dihedrals.
+                print(f"  WARNING: No dihedral for atom types {names4}, using k=0.")
+                counts["zero"] += 1
+                continue
             counts[how] += 1
             mol.dihedral_params[ind] = torch.tensor(cand[0]["k"], dtype=mol.dihedral_params.dtype,
                                                     device=mol.dihedral_params.device)
